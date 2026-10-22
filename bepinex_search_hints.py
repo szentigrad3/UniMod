@@ -43,7 +43,10 @@ def safe_manifest_name(path, plugins):
                 if name.endswith('.json'):
                     obj=json.loads(data)
                 else:
-                    import tomllib
+                    try:
+                        import tomllib  # Python 3.11+
+                    except ModuleNotFoundError:
+                        import tomli as tomllib  # Python 3.10
                     obj=tomllib.loads(data)
                     if isinstance(obj,dict):obj=obj.get('package',obj)
                 if isinstance(obj,dict):

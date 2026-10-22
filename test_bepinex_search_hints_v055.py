@@ -50,6 +50,19 @@ class HintsTests(unittest.TestCase):
         row=next(r for r in self.preview(unimod.discover_bepinex(self.plugins,True)) if r['mod']['path']==str(dll))
         self.assertEqual(row['query'],'Expanded Crafting')
 
+    def test_nested_toml_hint_python_310_fallback(self):
+        """Python 3.10 uses the tomli backport when tomllib is unavailable."""
+        import sys
+        from types import SimpleNamespace
+        pkg=self.plugins/'Python310';pkg.mkdir()
+        dll=pkg/'fallback.dll';dll.write_bytes(os.urandom(1000))
+        (pkg/'thunderstore.toml').write_text('[package]\nname = "Backport Test"\n')
+        fake_tomli=SimpleNamespace(loads=lambda content: {'package': {'name': 'Backport Test'}})
+        with patch.dict(sys.modules, {'tomllib': None, 'tomli': fake_tomli}):
+            row=next(r for r in self.preview(unimod.discover_bepinex(self.plugins, True))
+                     if r['mod']['path']==str(dll))
+        self.assertEqual(row['query'], 'Backport Test')
+
     def test_ignore_symlinked_manifest(self):
         external=self.root/'spoof.json';external.write_text('{"name":"Spoofed Nexus Identity"}')
         (self.plugins/'manifest.json').symlink_to(external)
