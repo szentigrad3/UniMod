@@ -28,3 +28,10 @@ jobs:
         run: |
           xvfb-run -a .buildvenv/bin/python unimod.py --smoke-test | tee smoke.txt
           grep -Fx UNIMOD_GUI_SMOKE_OK smoke.txt
+      - name: Provider GUI regression smoke
+        run: |
+          xvfb-run -a .buildvenv/bin/python gui_providers_smoke_v050.py
+          xvfb-run -a .buildvenv/bin/python gui_provider_files_smoke_v051.py
+          xvfb-run -a .buildvenv/bin/python gui_provider_inbox_smoke_v052.py
+          xvfb-run -a .buildvenv/bin/python gui_modio_user_path_smoke_v055.py
+          xvfb-run -a .buildvenv/bin/python gui_modio_download_smoke_v055.py
