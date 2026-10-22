@@ -50,6 +50,11 @@ jobs:
           xvfb-run -a .buildvenv/bin/python gui_bepinex_nexus_evidence_smoke_v055.py
           xvfb-run -a .buildvenv/bin/python gui_bepinex_search_hints_smoke_v055.py
           xvfb-run -a .buildvenv/bin/python gui_candidate_review_smoke_v055.py
+          xvfb-run -a .buildvenv/bin/python gui_providers_smoke_v050.py
+          xvfb-run -a .buildvenv/bin/python gui_provider_files_smoke_v051.py
+          xvfb-run -a .buildvenv/bin/python gui_provider_inbox_smoke_v052.py
+          xvfb-run -a .buildvenv/bin/python gui_modio_user_path_smoke_v055.py
+          xvfb-run -a .buildvenv/bin/python gui_modio_download_smoke_v055.py
       - name: Download appimagetool from official releases
         run: |
           curl -fL --retry 3 -o appimagetool-x86_64.AppImage \
@@ -68,8 +73,9 @@ jobs:
           xvfb-run -a env APPIMAGE_EXTRACT_AND_RUN=1 \
             dist-appimage/UniMod-0.55-test12-x86_64.AppImage --smoke-test | tee appimage-smoke.txt
           grep -Fx 'UNIMOD_GUI_SMOKE_OK' appimage-smoke.txt
-          sha256sum dist-appimage/UniMod-0.55-test12-x86_64.AppImage \
-            > dist-appimage/SHA256SUMS.txt
+          (cd dist-appimage && \
+            sha256sum UniMod-0.55-test12-x86_64.AppImage > SHA256SUMS.txt && \
+            sha256sum -c SHA256SUMS.txt)
       - uses: actions/upload-artifact@v4
         with:
           name: UniMod-v0.55-test12-x86_64-AppImage
