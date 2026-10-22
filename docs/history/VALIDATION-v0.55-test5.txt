@@ -1,0 +1,17 @@
+UniMod v0.55 Test 5 validation, 2026-10-22
+Based on v0.55 Test 4 source and the user-tested Graveyard Keeper workflows.
+Python unit test discovery: 437 tests, all passed.
+Modpack import specific tests: 23 tests, all passed.
+Virtual Linux GUI: gui_smoke.py, gui_mrpack_import_smoke_v055.py,
+gui_minecraft_profile_smoke_v054.py, gui_source_candidates_smoke_v055.py,
+gui_source_route_smoke_v055.py, gui_nexus_candidates_smoke_v055.py,
+gui_design_smoke_v029.py - all passed.
+Custom Linux x86_64 extraction runtime with SquashFS containing embedded
+Python/Tcl/Tk from prior verified Test 4 AppImage; standalone --smoke-test
+returned UNIMOD_GUI_SMOKE_OK from a directory containing spaces.
+No actual Prism/MultiMC installs or live Modrinth CDN downloads tested.
+Nexus OAuth/download gate unchanged. Conservative Test5 .mrpack importer
+requires exact loader+Minecraft version match and explicit user approval.
+Packaging note: experimental custom extraction runtime; NOT the official
+AppImageKit Type 2 runtime. Reproducible official build via GitHub workflow
+still requires PyInstaller and appimagetool.

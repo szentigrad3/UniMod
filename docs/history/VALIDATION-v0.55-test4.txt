@@ -1,0 +1,8 @@
+UniMod v0.55 Test 4 local validation (2026-10-22)
+Source: Based on v0.55 Test 3. Nexus Mods metadata discovery for Graveyard Keeper.
+Python unit tests: 424 passed (python3 -m unittest discover -p 'test_*.py' -q).
+GUI checks passed under virtual Linux: gui_source_candidates_smoke_v055.py, gui_source_route_smoke_v055.py, gui_nexus_candidates_smoke_v055.py, gui_design_smoke_v029.py.
+Bundled Linux x86_64 executable: launched Tk GUI under Xvfb from path containing spaces.
+Packaging: custom embedded ISO9660/extraction runtime, NOT a standard AppImageKit Type 2 build.
+Actual CachyOS / live Nexus GraphQL request: NOT tested; build container lacks internet name resolution.
+Nexus OAuth/download approval gate: unchanged.

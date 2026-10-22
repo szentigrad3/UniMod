@@ -1,0 +1,24 @@
+To: support@nexusmods.com
+Subject: Nexus Mods API application registration request — UniMod Linux Mod Manager
+
+Hello Nexus Mods Support,
+
+I'm developing UniMod, an open-source Linux mod manager, and would like to register it as a public-facing Nexus Mods API application.
+
+UniMod currently discovers existing mods across Steam, Heroic and Lutris installations, with particular support for Stardew Valley/SMAPI and BepInEx. It can identify official Nexus mod IDs, check versions using the API, display available files and support explicitly approved Nexus downloads with a separate, reviewable installation process. We aim to provide a simple browser-based account connection so ordinary users won't need to copy personal API keys.
+
+I have attached/linked a test build and its source, together with our planned authentication/download behaviour, test plan, privacy note and logo. The current test build accepts a personal API key for private testing and does not hardcode or store any API credentials.
+
+Could you please review the implementation and advise on the application registration process, any necessary API compliance changes, and the SSO application slug once approved? We would also appreciate confirmation on the preferred download API endpoints and the free/Premium browser-authorised download workflow for a newly registered Linux manager.
+
+Application: UniMod
+Version: 0.36.0 (testing)
+Platform: Linux x86_64
+Source license: MIT (third-party components retain their licenses)
+Application summary: Local-first Linux mod manager for installed games, profiles, updates and provider-authorised downloads.
+
+Thank you for your time.
+
+[Your name / developer contact]
+[Repository URL when published]
+[Link to the testing build and source files]

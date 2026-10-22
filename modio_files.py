@@ -1,0 +1,110 @@
+"""mod.io (user API-key) reviewed modfile downloads.
+
+Metadata requests use the user's session key; signed CDN URLs are never stored
+in receipts, logs, or installation records. Game writes occur elsewhere, only
+after a separate identity-based installer preflight and confirmation.
+"""
+import hashlib
+import re
+import time
+from urllib.parse import urlencode, urlsplit
+
+import provider_catalogues as catalogue
+import provider_downloads
+
+
+class ModioError(ValueError):
+    pass
+
+
+def _identity(value):
+    if not isinstance(value,str) or not re.fullmatch(r'[1-9]\d{0,11}/[1-9]\d{0,11}',value):
+        raise ModioError('Select an exact mod.io game and mod.')
+    return value.split('/')
+
+
+def _base(user_id, api_key):
+    uid=catalogue.numeric(user_id)
+    if not isinstance(api_key,str) or len(api_key.strip())<8:
+        raise ModioError('Enter your mod.io session key.')
+    return f'https://u-{uid}.modapi.io/v1'
+
+
+def _parse_modfile(data, game, mod):
+    if not isinstance(data,dict) or str(data.get('mod_id'))!=mod:
+        return None
+    if data.get('game_id') is not None and str(data['game_id'])!=game:
+        return None
+    fid=str(data.get('id') or '')
+    if not re.fullmatch(r'[1-9]\d{0,11}',fid):return None
+    # Only reviewed ZIP packages can be sent to UniMod's game-specific installer.
+    try: filename=provider_downloads._filename(data.get('filename'))
+    except provider_downloads.DownloadError:return None
+    if not filename.lower().endswith('.zip'):return None
+    try:size=int(data.get('filesize'))
+    except (ValueError,TypeError,OverflowError):return None
+    if not 0<size<=provider_downloads.MAX_FILE:return None
+    expected=(data.get('filehash') or {}).get('md5') if isinstance(data.get('filehash'),dict) else None
+    if not isinstance(expected,str) or not re.fullmatch(r'[a-fA-F0-9]{32}',expected):
+        return None  # no source hash, no download
+    if data.get('virus_positive') not in (None,0):return None
+    if data.get('virus_status') not in (None,1):return None
+    download=data.get('download') or {}
+    if not isinstance(download,dict):return None
+    url=download.get('binary_url') or ''
+    if not provider_downloads._safe_url(url,'mod.io'):return None
+    # API downloads must identify the same exact game, mod, and file.
+    parsed=urlsplit(url)
+    prefix=f'/v1/games/{game}/mods/{mod}/files/{fid}/download/'
+    if not parsed.path.startswith(prefix) or len(parsed.path)<=len(prefix):return None
+    expires=download.get('date_expires')
+    try:expires=int(expires) if expires is not None else 0
+    except (TypeError,ValueError):return None
+    if expires and expires<=int(time.time())+15:return None
+    platforms=data.get('platforms') or []
+    if not isinstance(platforms,list):return None
+    if platforms and not any(isinstance(p,dict) and str(p.get('platform','')).upper() in ('ALL','LINUX','WINDOWS') and p.get('status')==1 for p in platforms):
+        return None
+    return {'provider':'mod.io','identity':f'{game}/{mod}','version_id':fid,'version':str(data.get('version') or '')[:80],
+            'filename':filename,'size':size,'hashes':{'md5':expected.lower()},'url':url,
+            'expires':expires,'game_versions':[],'loaders':[],'dependencies':[],
+            'compatibility':'Package compatibility must be reviewed; metadata does not prove installability'}
+
+
+def list_modfiles(identity, *, user_id, api_key, fetch=None):
+    game,mod=_identity(identity)
+    base=_base(user_id,api_key)
+    address=f'{base}/games/{game}/mods/{mod}/files?'+urlencode({'api_key':api_key.strip(),'_limit':100})
+    result=catalogue.fetch_json(address,fetch=fetch)
+    if not isinstance(result,dict) or not isinstance(result.get('data'),list):
+        raise ModioError('mod.io returned an invalid modfile list.')
+    rows=[]
+    for item in result['data'][:100]:
+        row=_parse_modfile(item,game,mod)
+        if row:rows.append(row)
+    rows.sort(key=lambda x:(int(x['version_id'])),reverse=True)
+    return rows
+
+
+def refresh_selected(record, *, user_id, api_key, fetch=None):
+    """Obtain a fresh signed URL from exact-ID file endpoint before download."""
+    if not isinstance(record,dict) or record.get('provider')!='mod.io':
+        raise ModioError('Select a mod.io file.')
+    game,mod=_identity(record.get('identity'))
+    fid=catalogue.numeric(record.get('version_id'))
+    base=_base(user_id,api_key)
+    address=f'{base}/games/{game}/mods/{mod}/files/{fid}?'+urlencode({'api_key':api_key.strip()})
+    result=catalogue.fetch_json(address,fetch=fetch)
+    row=_parse_modfile(result,game,mod)
+    if row is None or row['version_id']!=fid:
+        raise ModioError('Selected mod.io file is no longer available for this game.')
+    # Avoid races where the file was replaced with different bytes after review.
+    for field in ('filename','size','hashes','version'):
+        if record.get(field)!=row[field]:
+            raise ModioError('The mod.io release changed since review. Refresh the file list.')
+    return row
+
+
+def download_selected(record, directory, *, user_id, api_key, fetch=None, opener=None):
+    new=refresh_selected(record,user_id=user_id,api_key=api_key,fetch=fetch)
+    return provider_downloads.download_file(new,directory,opener=opener)

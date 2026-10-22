@@ -1,0 +1,78 @@
+name: Linux AppImage build (release candidate)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  appimage:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install system build requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 python3-venv python3-tk xvfb xauth libfuse2 file curl
+      - name: Install pinned Python packager
+        run: |
+          /usr/bin/python3 -m venv --system-site-packages .buildvenv
+          .buildvenv/bin/python -m pip install 'pyinstaller==6.16.0' 'tomli==2.2.1'
+      - name: Python regression tests
+        run: .buildvenv/bin/python -m unittest discover -p 'test_*.py' -v
+      - name: GUI regression tests
+        run: |
+          xvfb-run -a .buildvenv/bin/python gui_smoke.py
+          xvfb-run -a .buildvenv/bin/python gui_profile_smoke_v019.py
+          xvfb-run -a .buildvenv/bin/python gui_diagnostics_smoke_v020.py
+          xvfb-run -a .buildvenv/bin/python gui_libraries_smoke_v021.py
+          xvfb-run -a .buildvenv/bin/python gui_launchers_smoke_v022.py
+          xvfb-run -a .buildvenv/bin/python gui_thunderstore_smoke_v023.py
+          xvfb-run -a .buildvenv/bin/python gui_dependencies_smoke_v024.py
+          xvfb-run -a .buildvenv/bin/python gui_sources_smoke_v025.py
+          xvfb-run -a .buildvenv/bin/python gui_global_smoke_v026.py
+          xvfb-run -a .buildvenv/bin/python gui_families_smoke_v031.py
+          xvfb-run -a .buildvenv/bin/python gui_aio_smoke_v034.py
+          xvfb-run -a .buildvenv/bin/python gui_nexus_queue_smoke_v037.py
+          xvfb-run -a .buildvenv/bin/python gui_queue_v038.py
+          xvfb-run -a .buildvenv/bin/python gui_workspace_smoke_v030.py
+          xvfb-run -a .buildvenv/bin/python gui_minecraft_profile_smoke_v054.py
+          xvfb-run -a .buildvenv/bin/python gui_mrpack_import_smoke_v055.py
+          xvfb-run -a .buildvenv/bin/python gui_mrpack_optional_smoke_v055.py
+          xvfb-run -a .buildvenv/bin/python gui_curseforge_preview_smoke_v055.py
+          xvfb-run -a .buildvenv/bin/python gui_source_route_smoke_v055.py
+          xvfb-run -a .buildvenv/bin/python gui_nexus_candidates_smoke_v055.py
+          xvfb-run -a .buildvenv/bin/python gui_bepinex_nexus_evidence_smoke_v055.py
+          xvfb-run -a .buildvenv/bin/python gui_bepinex_search_hints_smoke_v055.py
+          xvfb-run -a .buildvenv/bin/python gui_candidate_review_smoke_v055.py
+      - name: Download appimagetool from official releases
+        run: |
+          curl -fL --retry 3 -o appimagetool-x86_64.AppImage \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+      - name: Build bundled AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+          PYTHON_BIN: .buildvenv/bin/python
+          APPIMAGETOOL: ${{ github.workspace }}/appimagetool-x86_64.AppImage
+        run: bash ./build-appimage.sh
+      - name: Smoke test standalone AppImage
+        run: |
+          test -s dist-appimage/UniMod-0.55-test12-x86_64.AppImage
+          file dist-appimage/UniMod-0.55-test12-x86_64.AppImage
+          xvfb-run -a env APPIMAGE_EXTRACT_AND_RUN=1 \
+            dist-appimage/UniMod-0.55-test12-x86_64.AppImage --smoke-test | tee appimage-smoke.txt
+          grep -Fx 'UNIMOD_GUI_SMOKE_OK' appimage-smoke.txt
+          sha256sum dist-appimage/UniMod-0.55-test12-x86_64.AppImage \
+            > dist-appimage/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UniMod-v0.55-test12-x86_64-AppImage
+          path: |
+            dist-appimage/UniMod-0.55-test12-x86_64.AppImage
+            dist-appimage/SHA256SUMS.txt

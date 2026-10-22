@@ -1,0 +1,11 @@
+UniMod 0.55 Test 3 validation
+2026-10-22
+- Python unittest discovery: 418 tests, PASS
+- GUI source-route smoke: PASS (virtual Linux display)
+- GUI source-candidate smoke: PASS (virtual Linux display)
+- Bundled Linux executable: ELF x86_64, custom ISO extraction runtime
+- Executable archive extraction: PASS
+- GUI launch under virtual X11: PASS, Tk window 1500 x 900 detected
+- Real CachyOS / Graveyard Keeper installed mods: NOT TESTED
+- Live GitHub catalogue search and review: NOT TESTED
+- Nexus OAuth client: approval-gated, unchanged

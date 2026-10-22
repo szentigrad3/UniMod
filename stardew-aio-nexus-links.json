@@ -1,0 +1,25 @@
+{
+  "title": "Stardew Valley AIO — owner-provided original Nexus download links",
+  "note": "These links identify the original downloads, not guaranteed latest versions. Source mapping is opt-in, and related components require individual review.",
+  "links": [
+    {"name":"Stardew Valley Expanded","version":"1.15.11","url":"https://www.nexusmods.com/stardewvalley/mods/3753"},
+    {"name":"Ridgeside Village","version":"2.5.17","url":"https://www.nexusmods.com/stardewvalley/mods/7286"},
+    {"name":"East Scarp Remastered","version":"3.0.10","url":"https://www.nexusmods.com/stardewvalley/mods/5787"},
+    {"name":"Content Patcher","version":"2.9.1","url":"https://www.nexusmods.com/stardewvalley/mods/1915"},
+    {"name":"Farm Type Manager","version":"1.26.1","url":"https://www.nexusmods.com/stardewvalley/mods/3231"},
+    {"name":"SpaceCore","version":"1.28.4","url":"https://www.nexusmods.com/stardewvalley/mods/1348"},
+    {"name":"Custom Companions","version":"5.1.0","url":"https://www.nexusmods.com/stardewvalley/mods/8626"},
+    {"name":"Mapping Extensions and Extra Properties","version":"2.5.3","url":"https://www.nexusmods.com/stardewvalley/mods/14493"},
+    {"name":"HxW Tilesheets","version":"2.0.0","url":"https://www.nexusmods.com/stardewvalley/mods/20139"},
+    {"name":"Lumisteria Tilesheets - Indoor","version":"1.4.0","url":"https://www.nexusmods.com/stardewvalley/mods/9599"},
+    {"name":"Lumisteria Tilesheets - Outdoor","version":"1.4.0","url":"https://www.nexusmods.com/stardewvalley/mods/10448"},
+    {"name":"Generic Mod Config Menu","version":"1.16.0","url":"https://www.nexusmods.com/stardewvalley/mods/5098"},
+    {"name":"Automate","version":"2.6.1","url":"https://www.nexusmods.com/stardewvalley/mods/1063"},
+    {"name":"Better Crafting","version":"2.18.0","url":"https://www.nexusmods.com/stardewvalley/mods/11115"},
+    {"name":"Lookup Anything","version":"1.55.0","url":"https://www.nexusmods.com/stardewvalley/mods/541"},
+    {"name":"NPC Map Locations","version":"3.5.2","url":"https://www.nexusmods.com/stardewvalley/mods/239"},
+    {"name":"UI Info Suite 2","version":"2.3.7","url":"https://www.nexusmods.com/stardewvalley/mods/7098"},
+    {"name":"TimeSpeed","version":"2.8.1","url":"https://www.nexusmods.com/stardewvalley/mods/169"}
+  ],
+  "loader":{"name":"SMAPI","version":"4.5.2 in original AIO","url":"https://smapi.io/","note":"SMAPI is a loader, not a Nexus mod, and is not mapped to a Nexus page."}
+}

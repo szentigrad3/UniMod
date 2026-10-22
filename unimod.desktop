@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=UniMod
+GenericName=Universal Mod Manager
+Comment=Discover existing SMAPI, BepInEx and MelonLoader mods
+Categories=Game;Utility;
+Exec=unimod
+Icon=unimod
+Terminal=false
+StartupNotify=true

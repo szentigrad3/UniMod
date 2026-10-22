@@ -1,0 +1,17 @@
+UniMod v0.55 test1 — offline source validation
+
+Baseline input: UniMod-v0.54-Linux-source(1).zip
+Python regression suite: 418 tests passed (Python 3.13, 2026-10-22)
+CI-listed Xvfb GUI smoke scripts: 15/15 passed
+Syntax: Python compileall passed, bash -n build-appimage.sh passed
+Modrinth integration: mocked API metadata/downloads only; no live Modrinth transfer
+Minecraft integration: synthetic Prism/MultiMC profiles only; no real user profile tested
+Package: source ZIP only; no bundled AppImage built in this environment
+Nexus registration: still pending; public OAuth/Nexus downloads not enabled
+MRPACK: read-only inspection only; import and overrides remain blocked
+CurseForge: no change to key-gated read-only capability
+
+Key security coverage includes path traversal, archive symlinks, duplicate paths,
+archive checksums, pin/version conflicts, cycles, wrong loader, provider hash
+mismatch, download-before-write, dependency ordering, cached-file tampering,
+and receipt rollback after a later install failure.

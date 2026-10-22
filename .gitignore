@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+.buildvenv/
+*.egg-info/
+# Packaging
+build/
+dist/
+build-appimage/
+dist-appimage/
+*.spec
+*.AppImage
+*.AppImage.zsync
+# Local mod downloads, caches and secrets
+.env
+.env.*
+!.env.example
+*.log
+*.part
+*.tmp
+*.token
+*.key
+*.pem
+*.p12
+*.pfx
+*.secrets.json
+mods/
+Downloads/
+# OS/editor
+.DS_Store
+.idea/
+.vscode/

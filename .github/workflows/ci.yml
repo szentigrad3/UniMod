@@ -1,0 +1,30 @@
+name: Python CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python and Tkinter requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 python3-venv python3-tk xvfb xauth
+          python3 -m venv --system-site-packages .buildvenv
+          .buildvenv/bin/python -m pip install 'tomli==2.2.1'
+      - name: Compile and test
+        run: |
+          .buildvenv/bin/python -m compileall -q .
+          .buildvenv/bin/python -m unittest discover -p 'test_*.py' -q
+      - name: GUI launch smoke
+        run: |
+          xvfb-run -a .buildvenv/bin/python unimod.py --smoke-test | tee smoke.txt
+          grep -Fx UNIMOD_GUI_SMOKE_OK smoke.txt

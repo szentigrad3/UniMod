@@ -1,0 +1,4 @@
+# Optional integrations/preview helpers; core app primarily uses Python stdlib and bundled json5.
+Pillow>=10,<13
+websocket-client>=1.8,<2
+tomli>=2.2,<3; python_version < "3.11"
