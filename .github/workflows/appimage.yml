@@ -75,6 +75,9 @@ jobs:
           xvfb-run -a env APPIMAGE_EXTRACT_AND_RUN=1 \
             dist-appimage/UniMod-0.55-test12-x86_64.AppImage --smoke-test | tee appimage-smoke.txt
           grep -Fx 'UNIMOD_GUI_SMOKE_OK' appimage-smoke.txt
+          env APPIMAGE_EXTRACT_AND_RUN=1 \
+            dist-appimage/UniMod-0.55-test12-x86_64.AppImage --modio-self-test | tee modio-appimage-self-test.txt
+          grep -q '^UNIMOD_MODIO_SELFTEST_OK' modio-appimage-self-test.txt
           (cd dist-appimage && \
             sha256sum UniMod-0.55-test12-x86_64.AppImage > SHA256SUMS.txt && \
             sha256sum -c SHA256SUMS.txt)
