@@ -20,6 +20,7 @@ import provider_catalogues
 import provider_downloads
 import modio_files
 import modio_managed
+import modio_diagnostics
 import provider_staging
 import minecraft_profiles
 import minecraft_dependencies
@@ -3590,6 +3591,7 @@ class App(tk.Tk):
         ttk.Button(provider_buttons,text='Open selected official page',command=self.provider_open_result).pack(side='left')
         ttk.Button(provider_buttons,text='Link reviewed page to selected mod…',command=self.provider_assign_reviewed_source).pack(side='left',padx=8)
         ttk.Button(provider_buttons,text='Browse release files…',command=self.provider_files_dialog,style='Accent.TButton').pack(side='left',padx=9)
+        ttk.Button(provider_buttons,text='Test mod.io API…',command=self.provider_modio_diagnostic).pack(side='left',padx=7)
         ttk.Button(provider_buttons,text='Thunderstore installer…',command=lambda:self.show_page('Thunderstore Search')).pack(side='left',padx=9)
         ttk.Button(provider_buttons,text='Nexus account / registration…',command=lambda:self.show_page('Nexus Updates')).pack(side='right')
         ttk.Button(provider_buttons,text='Provider access requirements…',command=self.provider_access_dialog).pack(side='right',padx=8)
@@ -5377,6 +5379,100 @@ class App(tk.Tk):
         except (IndexError,ValueError,KeyError,TypeError):return
         # URLs originate from safe provider-specific constructors/parsers.
         webbrowser.open(url)
+
+    def provider_modio_diagnostic(self):
+        """Check a selected mod's live read-only API path without changing files."""
+        if getattr(self, '_modio_diagnostic_busy', False):
+            return
+        try:
+            selection = self.provider_tree.selection()
+            if len(selection) != 1:
+                raise modio_files.ModioError('Select one mod.io search result first.')
+            ref = self.provider_results[int(selection[0])]
+            if ref.get('provider') != 'mod.io':
+                raise modio_files.ModioError('Select an official mod.io search result.')
+            gid, mid = modio_files._identity(ref.get('identity'))
+            uid = provider_catalogues.numeric(self.modio_user_id.get().strip())
+            key = self.provider_key.get().strip()
+            digest = hashlib.sha256(key.encode()).digest()
+            verified = self.modio_verified
+            game = self.current()
+            if (self.provider_choice.get() != 'mod.io' or not game or not verified
+                    or verified[:3] != (gid, uid, digest)
+                    or self.provider_scope.get().strip() != gid
+                    or re.sub('[^a-z0-9]', '', game.get('name', '').casefold()) !=
+                       re.sub('[^a-z0-9]', '', verified[3].casefold())):
+                raise modio_files.ModioError('Verify the current installed game, mod.io User ID, and session key first.')
+            game_root = str(Path(game['root']).resolve(strict=True))
+            identity = gid + '/' + mid
+        except (modio_files.ModioError, provider_catalogues.ProviderError,
+                IndexError, KeyError, TypeError, ValueError, OSError) as exc:
+            messagebox.showwarning('mod.io API diagnostic', str(exc), parent=self)
+            return
+
+        self._modio_diagnostic_busy = True
+        self._modio_diagnostic_events = queue.Queue()
+        self.provider_info.set('Testing mod.io game, release list and exact-file metadata (GET only)…')
+
+        def worker():
+            try:
+                report = modio_diagnostics.check_modio_access(
+                    identity, user_id=uid, api_key=key)
+                error = None
+            except (modio_files.ModioError, provider_catalogues.ProviderError) as exc:
+                report = None
+                error = str(exc)
+            except Exception:
+                report = None
+                error = 'The mod.io API diagnostic could not complete.'
+            # Never queue the key, signed URLs, or provider raw responses.
+            self._modio_diagnostic_events.put(
+                (game_root, identity, uid, digest, report, error))
+
+        threading.Thread(target=worker, daemon=True).start()
+        self.after(100, self._poll_modio_diagnostic)
+
+    def _poll_modio_diagnostic(self):
+        try:
+            game_root, identity, uid, digest, report, error = self._modio_diagnostic_events.get_nowait()
+        except queue.Empty:
+            if self._modio_diagnostic_busy and self.winfo_exists():
+                self.after(100, self._poll_modio_diagnostic)
+            return
+        self._modio_diagnostic_busy = False
+        if not self.winfo_exists():
+            return
+        game = self.current()
+        selected = self.provider_tree.selection()
+        try:
+            same_selection = (len(selected) == 1 and
+                              self.provider_results[int(selected[0])].get('provider') == 'mod.io' and
+                              self.provider_results[int(selected[0])].get('identity') == identity)
+            same_game = game and str(Path(game['root']).resolve(strict=True)) == game_root
+            same_session = (self.provider_choice.get() == 'mod.io' and
+                            self.modio_verified is not None and
+                            self.modio_verified[:3] == (identity.split('/')[0], uid, digest) and
+                            self.provider_scope.get().strip() == identity.split('/')[0] and
+                            self.modio_user_id.get().strip() == uid and
+                            hashlib.sha256(self.provider_key.get().strip().encode()).digest() == digest)
+        except (OSError, ValueError, IndexError, TypeError, KeyError):
+            same_selection = same_game = same_session = False
+        if not (same_selection and same_game and same_session):
+            self.provider_info.set('mod.io game, selection or credentials changed; diagnostic results discarded.')
+            return
+        if error:
+            self.provider_info.set('mod.io API diagnostic: ' + error)
+            messagebox.showwarning('mod.io API diagnostic', error, parent=self)
+            return
+        self.provider_info.set('mod.io API diagnostic completed; no file downloaded or installed.')
+        messagebox.showinfo('mod.io API diagnostic',
+            f"Game ID: {report['game_id']} | Mod ID: {report['mod_id']}\n"
+            f"Status: {report['status']}\n"
+            f"Eligible ZIP releases on first page: {report['eligible_zip_files']}\n"
+            f"Exact file checked: {report['checked_file_id'] or 'none'}\n\n"
+            'Only API metadata was requested. No ZIP was downloaded, game files were not changed, '
+            'and the session key was not saved. Live install and rollback testing is still required.',
+            parent=self)
 
     def provider_files_dialog(self):
         """Reviewed file selection: no source assignment or installation from search."""
