@@ -34,3 +34,7 @@ CurseForge supports explicitly verified game IDs and read-only release-file meta
 ## v0.56 development — private mod.io API diagnostic
 
 Select an installed game, choose **mod.io**, enter your private user API path ID and key, verify the game, search and select a mod, then press **Test mod.io API…**. This performs three **read-only** API metadata requests at most: game identity, ZIP release listing, and exact-file metadata refresh for one listed release. It never downloads a ZIP, writes to a game, stores credentials, or includes expiring signed URLs in the result. The report distinguishes zero eligible ZIP releases from a verified release. It is a live metadata check, **not** proof that a particular ZIP can be installed or rolled back successfully. Offline tests cannot certify production API access.
+
+## Offline mod.io lifecycle self-test (v0.56 development)
+
+Run `python3 unimod.py --modio-self-test` from source or `UniMod.AppImage --modio-self-test` from a future development build. It uses a disposable temporary SMAPI game and simulated mod.io metadata/download bytes to exercise staged MD5/SHA-256 verification, new installation, reviewed update, preserved backup, changed-archive refusal, wrong-game refusal, corrupted download rejection, and interrupted-update restoration. It does not connect to mod.io, read your key, or change your real games; it is **not a substitute for live download/install testing**. The currently published v0.55.0-test12 AppImage predates this command.
