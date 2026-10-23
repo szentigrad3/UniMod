@@ -19,6 +19,7 @@ import smapi_lookup_cache
 import provider_catalogues
 import provider_downloads
 import modio_files
+import modio_managed
 import provider_staging
 import minecraft_profiles
 import minecraft_dependencies
@@ -2848,7 +2849,24 @@ def provider_install_reviewed(game,receipt,*,receipt_path=None):
     archive=provider_staging.inspect_receipt(receipt,game_root=game['root'])
     if plan['status']=='Update existing':
         backup=apply_downloaded_update(game,plan['match'])
-        return {'action':'updated','backup':str(backup),'paths':[]}
+        # An update has committed at this point. A failed history write
+        # must not cause a dangerous retry or hide a successful update.
+        target=str(Path(plan['match']['target_path']).resolve())
+        history_warning=False
+        try:
+            details=modio_managed.provenance(game,[target],receipt)
+            if details:
+                record={'game':str(Path(game['root']).resolve()),
+                        'package':'mod.io:'+str(receipt['identity']),
+                        'version':str(receipt.get('version') or '')[:80],
+                        'source':'', 'dependencies':receipt.get('dependencies',[]),
+                        'paths':[target], 'installed_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                        **details}
+                history=read_receipts();history.append(record);write_receipts(history)
+        except (OSError,ValueError,TypeError):
+            history_warning=True
+        return {'action':'updated','backup':str(backup),'paths':[],
+                'history_warning':history_warning}
     base=mod_root(game).resolve();before={p.name for p in base.iterdir()} if base.exists() else set()
     try:
         names=install_zip(game,archive)
@@ -2856,6 +2874,7 @@ def provider_install_reviewed(game,receipt,*,receipt_path=None):
         record={'game':str(Path(game['root']).resolve()),'package':receipt.get('provider','')+':'+receipt.get('identity',''),
                 'version':receipt.get('version',''),'source':'', 'dependencies':receipt.get('dependencies',[]),
                 'paths':paths,'installed_at':datetime.datetime.now(datetime.timezone.utc).isoformat()}
+        record.update(modio_managed.provenance(game,paths,receipt))
         all_receipts=read_receipts();all_receipts.append(record);write_receipts(all_receipts)
         return {'action':'installed','backup':'','paths':paths}
     except Exception:
@@ -3714,6 +3733,7 @@ class App(tk.Tk):
         ttk.Button(stagebar,text='Inspect .mrpack…',command=self.minecraft_mrpack_inspect).pack(side='left',padx=8)
         ttk.Button(stagebar,text='Import .mrpack to Prism/MultiMC…',command=self.minecraft_mrpack_import).pack(side='left',padx=8)
         ttk.Button(stagebar,text='Go to Discover',command=lambda:self.show_page('Mod Websites')).pack(side='right')
+        ttk.Button(stagebar,text='Check managed mod.io releases…',command=self.provider_check_modio_updates).pack(side='right',padx=(0,9))
         self.provider_stage_info=tk.StringVar(value='For SMAPI/BepInEx choose a game; for Modrinth select a JAR and a verified Prism/MultiMC profile. Nothing installs automatically.')
         ttk.Label(staged,textvariable=self.provider_stage_info,wraplength=1000).pack(anchor='w',pady=(0,8))
         stagearea=ttk.Frame(staged);stagearea.pack(fill='both',expand=True)
@@ -5508,6 +5528,77 @@ class App(tk.Tk):
         ttk.Button(actions,text='Official page ↗',command=lambda:webbrowser.open(ref['url'])).pack(side='left')
         ttk.Button(actions,text='Close',command=dialog.destroy).pack(side='right')
 
+    def provider_check_modio_updates(self):
+        """Read-only check for exact mod.io identities from UniMod install receipts."""
+        if getattr(self,'_modio_check_busy',False):return
+        game=self.current()
+        try:
+            verified=self.modio_verified
+            if not game or game.get('kind') not in ('smapi','bepinex') or not verified:
+                raise modio_files.ModioError('Select a supported installed game and verify its mod.io game ID in Discover first.')
+            gid,uid,digest,title=verified
+            key=self.provider_key.get().strip()
+            if (self.provider_choice.get()!='mod.io' or self.provider_scope.get().strip()!=gid
+                or self.modio_user_id.get().strip()!=uid
+                or hashlib.sha256(key.encode()).digest()!=digest
+                or re.sub('[^a-z0-9]','',game.get('name','').casefold())!=
+                   re.sub('[^a-z0-9]','',title.casefold())):
+                raise modio_files.ModioError('mod.io game/account/key has changed. Verify the selected game again.')
+            managed=modio_managed.managed_installs(game,read_receipts(),game_id=gid)
+            if not managed:
+                messagebox.showinfo('Managed mod.io check',
+                    'No unchanged, provenance-tracked mod.io installations for this game. '
+                    'Older installations may require one new reviewed installation to establish exact file-ID tracking. '
+                    'No game files were changed.',parent=self)
+                return
+            game_root=str(Path(game['root']).resolve())
+        except (ValueError,TypeError,KeyError,AttributeError) as exc:
+            messagebox.showwarning('Managed mod.io check',str(exc),parent=self);return
+        self._modio_check_busy=True
+        self._modio_check_events=queue.Queue()
+        self.provider_stage_info.set(f'Checking available mod.io files for {len(managed)} verified managed installation(s)…')
+        def worker():
+            updates=[];errors=0
+            for installed in managed[:20]:
+                try:
+                    rows=modio_files.list_modfiles(installed['identity'],user_id=uid,api_key=key)
+                    updates.extend(modio_managed.release_candidates(installed,rows)[:3])
+                except (modio_files.ModioError,provider_catalogues.ProviderError,ValueError):
+                    errors+=1
+                except Exception:
+                    errors+=1
+            self._modio_check_events.put((game_root,gid,uid,digest,updates,errors,len(managed)))
+        threading.Thread(target=worker,daemon=True).start()
+        self.after(90,self._poll_modio_check)
+
+    def _poll_modio_check(self):
+        try: result=self._modio_check_events.get_nowait()
+        except queue.Empty:
+            if self._modio_check_busy and self.winfo_exists():self.after(90,self._poll_modio_check)
+            return
+        self._provider_modio_check_finished(*result)
+
+    def _provider_modio_check_finished(self,game_root,gid,uid,digest,updates,errors,count):
+        self._modio_check_busy=False
+        if not self.winfo_exists():return
+        game=self.current()
+        if (not game or str(Path(game['root']).resolve())!=game_root
+            or self.modio_verified is None or self.modio_verified[:3]!=(gid,uid,digest)
+            or hashlib.sha256(self.provider_key.get().strip().encode()).digest()!=digest):
+            self.provider_stage_info.set('Game or mod.io credentials changed. Discarded update check results.')
+            return
+        mods={x['identity'] for x in updates}
+        self.provider_stage_info.set(f'{len(mods)} managed mod.io mod(s) have alternative release files to review. {errors} catalogue check(s) failed. Nothing downloaded or installed.')
+        if updates:
+            lines=[f"{row['identity']}: installed file #{row['installed_file_id']} / review file #{row['available_file_id']} ({row['version'] or 'unlabelled'})"
+                   for row in updates[:12]]
+            messagebox.showinfo('mod.io releases to review',
+                '\n'.join(lines)+'\n\nFile IDs do not prove a newer compatible version. Open the exact mod.io project in Discover to review release notes and stage an approved ZIP. No game files were changed.',parent=self)
+        else:
+            messagebox.showinfo('Managed mod.io check',
+                f'No alternative installable ZIP file records were returned for {count} tracked mod(s). '
+                f'{errors} request(s) failed. A failed or filtered listing is not proof the mod is up to date.',parent=self)
+
     def provider_stage_refresh(self):
         if not hasattr(self,'provider_stage_tree'):return
         self.provider_stage_rows=provider_staging.read_staged(PROVIDER_STAGE_FILE)
@@ -5781,6 +5872,8 @@ class App(tk.Tk):
         self.refresh();self.provider_stage_refresh()
         info=('Previous mod backed up at: '+outcome['backup'] if outcome['action']=='updated' else
               str(len(outcome['paths']))+' new managed folder(s) recorded for recovery.')
+        if outcome.get('history_warning'):
+            info+='\nUpdate succeeded, but mod.io provenance could not be saved. Automatic release checks will not recognise this update.'
         messagebox.showinfo('Provider installation completed',info,parent=self)
 
     def ts_stage(self):
