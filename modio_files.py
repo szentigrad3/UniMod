@@ -66,15 +66,47 @@ def _parse_modfile(data, game, mod):
     if platforms and not any(isinstance(p,dict) and str(p.get('platform','')).upper() in ('ALL','LINUX','WINDOWS') and p.get('status')==1 for p in platforms):
         return None
     return {'provider':'mod.io','identity':f'{game}/{mod}','version_id':fid,'version':str(data.get('version') or '')[:80],
+            'date_added':_date_added(data.get('date_added')),
             'filename':filename,'size':size,'hashes':{'md5':expected.lower()},'url':url,
             'expires':expires,'game_versions':[],'loaders':[],'dependencies':[],
             'compatibility':'Package compatibility must be reviewed; metadata does not prove installability'}
 
 
+def _date_added(value):
+    # The timestamp is API evidence, not a semantic-version comparison.
+    if isinstance(value, bool):
+        return 0
+    try:
+        number = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0
+    return number if 0 < number <= 4102444800 else 0
+
+
+def get_modfile_date(identity, file_id, *, user_id, api_key, fetch=None):
+    """Read the exact installed modfile's date, even if its signed URL expired.
+
+    This is metadata-only. Never trust a date from a different mod or game.
+    Returns zero if the API did not supply a valid publication date.
+    """
+    game, mod = _identity(identity)
+    fid = catalogue.numeric(file_id)
+    base = _base(user_id, api_key)
+    address = f'{base}/games/{game}/mods/{mod}/files/{fid}?' + urlencode({'api_key': api_key.strip()})
+    result = catalogue.fetch_json(address, fetch=fetch)
+    if (not isinstance(result, dict) or str(result.get('id')) != fid
+            or str(result.get('mod_id')) != mod
+            or (result.get('game_id') is not None and str(result['game_id']) != game)):
+        raise ModioError('The installed mod.io file no longer has verifiable game/mod identity.')
+    return _date_added(result.get('date_added'))
+
+
 def list_modfiles(identity, *, user_id, api_key, fetch=None):
     game,mod=_identity(identity)
     base=_base(user_id,api_key)
-    address=f'{base}/games/{game}/mods/{mod}/files?'+urlencode({'api_key':api_key.strip(),'_limit':100})
+    # mod.io defaults to ascending ID (oldest first). Never silently miss the
+    # latest releases for a project with more than 100 modfiles.
+    address=f'{base}/games/{game}/mods/{mod}/files?'+urlencode({'api_key':api_key.strip(),'_limit':100,'_sort':'-date_added'})
     result=catalogue.fetch_json(address,fetch=fetch)
     if not isinstance(result,dict) or not isinstance(result.get('data'),list):
         raise ModioError('mod.io returned an invalid modfile list.')
@@ -82,7 +114,7 @@ def list_modfiles(identity, *, user_id, api_key, fetch=None):
     for item in result['data'][:100]:
         row=_parse_modfile(item,game,mod)
         if row:rows.append(row)
-    rows.sort(key=lambda x:(int(x['version_id'])),reverse=True)
+    rows.sort(key=lambda x:(x['date_added'],int(x['version_id'])),reverse=True)
     return rows
 
 
