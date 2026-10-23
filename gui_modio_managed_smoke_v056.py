@@ -35,7 +35,8 @@ with tempfile.TemporaryDirectory() as temp:
               'paths': [str(folder.resolve())],
               **modio_managed.provenance(game, [str(folder)], source)}
     key = 'local-gui-mock-key'
-    alternate = {'provider': 'mod.io', 'identity': '123/77', 'version_id': '89', 'version': '1.2.0'}
+    alternate = {'provider': 'mod.io', 'identity': '123/77', 'version_id': '89', 'version': '1.2.0', 'date_added': 2000}
+    installed = {'provider': 'mod.io', 'identity': '123/77', 'version_id': '88', 'version': '1.0.0', 'date_added': 1000}
     with patch.object(unimod, 'CONFIG', base / 'config.json'), \
          patch.object(unimod, 'SOURCE_OVERRIDES', base / 'sources.json'), \
          patch.object(unimod, 'detect_games', return_value=[]):
@@ -50,7 +51,7 @@ with tempfile.TemporaryDirectory() as temp:
             app.modio_verified = ('123', '456', hashlib.sha256(key.encode()).digest(), 'Stardew Valley')
             notices = []
             with patch.object(unimod, 'read_receipts', return_value=[record]), \
-                 patch.object(unimod.modio_files, 'list_modfiles', return_value=[alternate]) as lookup, \
+                 patch.object(unimod.modio_files, 'list_modfiles', return_value=[alternate, installed]) as lookup, \
                  patch.object(unimod.messagebox, 'showinfo', side_effect=lambda *args, **kwargs: notices.append(args)):
                 app.provider_check_modio_updates()
                 spin(app, lambda: not app._modio_check_busy and bool(notices))
