@@ -7269,6 +7269,10 @@ if __name__=='__main__':
     elif '--smoke-test' in sys.argv:
         app=App();app.update();app.destroy()
         print('UNIMOD_GUI_SMOKE_OK')
+    elif '--modio-self-test' in sys.argv:
+        from modio_selftest import run as run_modio_selftest
+        run_modio_selftest()
+        print('UNIMOD_MODIO_SELFTEST_OK (offline, temporary files only)')
     elif '--nexus-readiness' in sys.argv:
         r=provider_catalogues.readiness(nexus_integr.registered_app_slug())
         try:
