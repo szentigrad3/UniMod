@@ -119,3 +119,27 @@ def release_candidates(installed, listed):
         result.append({'identity': identity, 'installed_file_id': current,
                        'available_file_id': fid, 'version': str(row.get('version') or '')[:80]})
     return result
+
+
+def newer_release_candidates(installed, listed, *, current_date_added):
+    """Distinguish verifiably newer files from unknown-date alternatives.
+
+    Only mod.io timestamps attached to exact file identities can establish
+    recency. A higher modfile ID or a version label alone cannot.
+    """
+    base = release_candidates(installed, listed)
+    if not isinstance(listed, list):
+        return []
+    current = current_date_added if type(current_date_added) is int and 0 < current_date_added <= 4102444800 else 0
+    by_id = {row.get('version_id'): row for row in listed[:100]
+             if isinstance(row, dict) and isinstance(row.get('version_id'), str)}
+    result = []
+    for item in base:
+        source = by_id.get(item['available_file_id'])
+        value = source.get('date_added', 0) if isinstance(source, dict) else 0
+        published = value if type(value) is int and 0 < value <= 4102444800 else 0
+        if current and published and published <= current:
+            continue  # Known older/same-date builds cannot be called updates.
+        result.append({**item, 'review_status': ('Newer publication date' if current and published else
+                                                 'Release order unverified')})
+    return result
