@@ -24,6 +24,10 @@ jobs:
         run: |
           .buildvenv/bin/python -m compileall -q .
           .buildvenv/bin/python -m unittest discover -p 'test_*.py' -q
+      - name: Offline mod.io lifecycle self-test
+        run: |
+          .buildvenv/bin/python unimod.py --modio-self-test | tee modio-self-test.txt
+          grep -q '^UNIMOD_MODIO_SELFTEST_OK' modio-self-test.txt
       - name: GUI launch smoke
         run: |
           xvfb-run -a .buildvenv/bin/python unimod.py --smoke-test | tee smoke.txt
