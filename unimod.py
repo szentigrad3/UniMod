@@ -5562,7 +5562,15 @@ class App(tk.Tk):
             for installed in managed[:20]:
                 try:
                     rows=modio_files.list_modfiles(installed['identity'],user_id=uid,api_key=key)
-                    updates.extend(modio_managed.release_candidates(installed,rows)[:3])
+                    current=next((row.get('date_added',0) for row in rows
+                                  if row.get('version_id')==installed['version_id']),None)
+                    if current is None:
+                        # Older installed files may fall beyond the newest 100.
+                        # Retrieve their exact metadata; never infer dates from IDs.
+                        current=modio_files.get_modfile_date(installed['identity'],installed['version_id'],
+                                                               user_id=uid,api_key=key)
+                    updates.extend(modio_managed.newer_release_candidates(installed,rows,
+                                             current_date_added=current)[:3])
                 except (modio_files.ModioError,provider_catalogues.ProviderError,ValueError):
                     errors+=1
                 except Exception:
@@ -5588,16 +5596,17 @@ class App(tk.Tk):
             self.provider_stage_info.set('Game or mod.io credentials changed. Discarded update check results.')
             return
         mods={x['identity'] for x in updates}
-        self.provider_stage_info.set(f'{len(mods)} managed mod.io mod(s) have alternative release files to review. {errors} catalogue check(s) failed. Nothing downloaded or installed.')
+        verified=sum(1 for row in updates if row['review_status']=='Newer publication date')
+        self.provider_stage_info.set(f'{verified} verified newer release file(s), {len(updates)-verified} unverified alternative(s), {errors} failed checks. Nothing downloaded or installed.')
         if updates:
-            lines=[f"{row['identity']}: installed file #{row['installed_file_id']} / review file #{row['available_file_id']} ({row['version'] or 'unlabelled'})"
+            lines=[f"{row['identity']}: installed file #{row['installed_file_id']} / review file #{row['available_file_id']} ({row['version'] or 'unlabelled'}) — {row['review_status']}"
                    for row in updates[:12]]
             messagebox.showinfo('mod.io releases to review',
-                '\n'.join(lines)+'\n\nFile IDs do not prove a newer compatible version. Open the exact mod.io project in Discover to review release notes and stage an approved ZIP. No game files were changed.',parent=self)
+                '\n'.join(lines)+'\n\nPublication dates are not compatibility guarantees. Unverified files need manual review. Open the exact mod.io project in Discover before staging an approved ZIP. No game files were changed.',parent=self)
         else:
             messagebox.showinfo('Managed mod.io check',
-                f'No alternative installable ZIP file records were returned for {count} tracked mod(s). '
-                f'{errors} request(s) failed. A failed or filtered listing is not proof the mod is up to date.',parent=self)
+                f'No newer or unverified alternative ZIP releases were found among the queried results for {count} tracked mod(s). '
+                f'{errors} request(s) failed. Filtered or failed listings do not prove a mod is up to date.',parent=self)
 
     def provider_stage_refresh(self):
         if not hasattr(self,'provider_stage_tree'):return
