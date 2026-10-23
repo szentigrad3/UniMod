@@ -21,7 +21,7 @@ This is a development preview. Live provider verification is pending; see the ma
 | Steam Workshop | Official link | Steam manages downloads | Managed by Steam; UniMod does not bypass restrictions |
 | ModDB | Official link | Not implemented | Not implemented |
 
-All source search results are leads, not confirmed provenance. Downloads do not install automatically. The AppImage is an experimental extract-and-run build, not official AppImageKit.
+All source search results are leads, not confirmed provenance. Downloads do not install automatically. The GitHub release's Linux AppImage is built with the official AppImage tooling and smoke-tested by CI; real CachyOS/provider validation is still required.
 
 ## v0.55 Test 5 Modrinth modpacks
 
@@ -30,3 +30,7 @@ Reviewed `.mrpack` import is available for existing Prism/MultiMC profiles only.
 
 ## v0.55 Test 7
 CurseForge supports explicitly verified game IDs and read-only release-file metadata for users with an approved, session-only API key. CurseForge downloads remain disabled; Nexus downloads/OAuth remain registration-gated.
+
+## v0.56 development — private mod.io API diagnostic
+
+Select an installed game, choose **mod.io**, enter your private user API path ID and key, verify the game, search and select a mod, then press **Test mod.io API…**. This performs three **read-only** API metadata requests at most: game identity, ZIP release listing, and exact-file metadata refresh for one listed release. It never downloads a ZIP, writes to a game, stores credentials, or includes expiring signed URLs in the result. The report distinguishes zero eligible ZIP releases from a verified release. It is a live metadata check, **not** proof that a particular ZIP can be installed or rolled back successfully. Offline tests cannot certify production API access.
