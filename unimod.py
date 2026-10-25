@@ -3275,14 +3275,14 @@ class App(tk.Tk):
         ttk.Label(rail,text='NAVIGATION',style='TopMuted.TLabel').pack(anchor='w',pady=(2,12))
         self.primary_workspaces=(
             ('Mods','Installed Mods'),('Updates','Updates Available'),('Library','All Games & Mods'),
-            ('Discover','Mod Websites'),('Downloads','Update Inbox'),('Overview','Overview'),
+            ('Discover','Mod Websites'),('Downloads','Downloads'),('Overview','Overview'),
         )
         # Use readable labels rather than a mystery row of icons.
         # Advanced tools remain in a separate menu.
         self.rail_buttons={}
         for glyph,title,page in [('⌂','Home','Overview'),('▤','My Mods','Installed Mods'),
                                  ('⌕','Find Mods','Mod Websites'),('↻','Updates','Updates Available'),
-                                 ('↓','Downloads','Update Inbox'),('▦','All Games','All Games & Mods')]:
+                                 ('↓','Downloads','Downloads'),('▦','All Games','All Games & Mods')]:
             button=ttk.Button(rail,text=f'{glyph}  {title}',width=17,style='Rail.TButton',
                               command=lambda name=page:self.show_page(name))
             button.pack(fill='x',pady=(0,8),ipady=5)
@@ -3403,6 +3403,37 @@ class App(tk.Tk):
         pkg_scroll=ttk.Scrollbar(pkgarea,command=self.pkg_tree.yview);pkg_scroll.pack(side='right',fill='y')
         self.pkg_tree.configure(yscrollcommand=pkg_scroll.set)
         self.tabs.add(sources,text='  Mod Websites  ')
+        downloads_home=ttk.Frame(self.tabs,padding=(24,20))
+        self.tabs.add(downloads_home,text='  Downloads  ')
+        ttk.Label(downloads_home,text='Downloads',style='Title.TLabel').pack(anchor='w',pady=(0,8))
+        ttk.Label(downloads_home,
+                  text='Check downloads before installing them. Nothing on this page changes your games.',
+                  style='Subtle.TLabel',wraplength=900).pack(anchor='w',pady=(0,16))
+        provider_group=ttk.Frame(downloads_home,style='Card.TFrame',padding=(20,18))
+        provider_group.pack(fill='x',pady=(0,12))
+        ttk.Label(provider_group,text='From mod websites in UniMod',
+                  style='Section.TLabel').pack(anchor='w',pady=(0,6))
+        ttk.Label(provider_group,text='Downloaded releases from supported providers. Review the file and game compatibility first.',
+                  style='Subtle.TLabel',wraplength=800).pack(anchor='w',pady=(0,8))
+        self.downloads_provider_summary=tk.StringVar(value='Checking downloaded files…')
+        ttk.Label(provider_group,textvariable=self.downloads_provider_summary,
+                  style='Subtle.TLabel').pack(anchor='w',pady=(0,10))
+        ttk.Button(provider_group,text='Review provider downloads',
+                   command=self.provider_review_downloads,style='Accent.TButton').pack(anchor='w')
+        nexus_group=ttk.Frame(downloads_home,style='Card.TFrame',padding=(20,18))
+        nexus_group.pack(fill='x',pady=(0,12))
+        ttk.Label(nexus_group,text='Nexus links and downloaded ZIP updates',
+                  style='Section.TLabel').pack(anchor='w',pady=(0,6))
+        ttk.Label(nexus_group,
+                  text='Review Nexus download requests or scan ZIP updates from your Downloads folder. '
+                       'Existing mods are not replaced without a separate approval.',
+                  style='Subtle.TLabel',wraplength=800).pack(anchor='w',pady=(0,10))
+        ttk.Button(nexus_group,text='Review Nexus / ZIP downloads',
+                   command=lambda:self.show_page('Update Inbox')).pack(anchor='w')
+        ttk.Label(downloads_home,
+                  text='Tip: If you have a local ZIP to install, select a game and use Install ZIP in the top bar. '
+                       'Updates to existing mods should use the reviewed update workflow.',
+                  style='Subtle.TLabel',wraplength=950).pack(anchor='w',pady=(14,0))
         self.tabs.add(tools,text='  Profiles & Tools  ')
         diagnostics=ttk.Frame(self.tabs,padding=12);self.tabs.add(diagnostics,text='  Game Diagnostics  ')
         ttk.Label(diagnostics,text='Steam / Proton / Mod Loader Diagnostics',style='Section.TLabel').pack(anchor='w',pady=(0,8))
@@ -4143,6 +4174,8 @@ class App(tk.Tk):
         raise ValueError('Unknown UniMod page: '+str(name))
 
     def show_page(self,name):
+        if name=='Downloads':
+            self.provider_stage_refresh()
         self.tabs.select(self._tab_with_name(name))
 
     def configure_tool_menu(self):
@@ -6260,6 +6293,11 @@ class App(tk.Tk):
             self.provider_stage_tree.insert('','end',iid=str(index),values=(entry.get('provider',''),entry.get('filename',''),
                      entry.get('version',''),Path(entry.get('game_root','')).name if entry.get('game_root') else 'Unassigned',str(dep_count)+' declared'))
         self.provider_stage_info.set(f'{len(self.provider_stage_rows)} staged files. Select a matching installed game and choose Review & install. ZIPs require verified package identities; no automatic installs.')
+        if hasattr(self,'downloads_provider_summary'):
+            count=len(self.provider_stage_rows)
+            self.downloads_provider_summary.set(
+                f'{count} downloaded provider file(s) in the review list. '
+                'Files are not installed until you approve them.')
 
     def minecraft_mrpack_inspect(self):
         """Read-only modpack contents review, not an importer."""
