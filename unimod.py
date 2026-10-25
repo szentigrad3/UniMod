@@ -3207,6 +3207,7 @@ class App(tk.Tk):
         self.source_candidate_target=None
         self._queue_events=queue.Queue()
         self._provider_events=queue.Queue()
+        self._downloads_review_events=queue.Queue()
         self._stage_running=False
         self._nexus_batch_remaining=0
         self._nexus_cancel_event=None
@@ -6365,9 +6366,19 @@ class App(tk.Tk):
             try:result=provider_install_preflight(game,receipt)
             except Exception:
                 result={'status':'Blocked','detail':'Could not inspect this download safely.'}
-            self.after(0,lambda:self._downloads_review_finished(
-                token,game_root,identity,result))
+            # Workers never call Tk directly; the UI thread polls the queue.
+            self._downloads_review_events.put((token,game_root,identity,result))
         threading.Thread(target=check,daemon=True).start()
+        self.after(50,self._downloads_poll_review)
+
+    def _downloads_poll_review(self):
+        if not self.winfo_exists():return
+        try:token,root,identity,result=self._downloads_review_events.get_nowait()
+        except queue.Empty:
+            if getattr(self,'_downloads_review_busy',False):
+                self.after(50,self._downloads_poll_review)
+            return
+        self._downloads_review_finished(token,root,identity,result)
 
     def _downloads_review_finished(self,token,game_root,identity,result):
         self._downloads_review_busy=False
