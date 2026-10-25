@@ -21,6 +21,7 @@ import provider_downloads
 import modio_files
 import modio_managed
 import modio_diagnostics
+import modio_live_probe
 import provider_staging
 import minecraft_profiles
 import minecraft_dependencies
@@ -5545,6 +5546,36 @@ class App(tk.Tk):
                 return
             if not dialog.winfo_exists():return
             state['busy']=False;load_btn.configure(state='normal');download_btn.configure(state='normal')
+            if probe_btn is not None:probe_btn.configure(state='normal')
+            if kind=='probe':
+                report,reviewed_iid,game_root,uid,key_digest=payload
+                now=self.current()
+                current_selection=tree.selection()
+                try:
+                    unchanged=(bool(now) and str(Path(now['root']).resolve())==game_root
+                       and self.provider_choice.get()=='mod.io'
+                       and self.provider_scope.get().strip()==identity.split('/')[0]
+                       and self.modio_user_id.get().strip()==uid
+                       and self.modio_verified is not None
+                       and self.modio_verified[:3]==(identity.split('/')[0],uid,key_digest)
+                       and hashlib.sha256(self.provider_key.get().strip().encode()).digest()==key_digest
+                       and current_selection==(reviewed_iid,)
+                       and state['rows'][int(reviewed_iid)].get('version_id')==report['file_id'])
+                except (OSError,IndexError,KeyError,TypeError,ValueError):
+                    unchanged=False
+                if not unchanged:
+                    info.set('Selection, game or mod.io session changed; temporary test result discarded.')
+                    return
+                info.set('Temporary ZIP verified; deleted after the test. Nothing staged or installed.')
+                messagebox.showinfo('mod.io temporary download verification',
+                    f"Game/mod: {report['game_id']}/{report['mod_id']}\n"
+                    f"Release file ID: {report['file_id']}\n"
+                    f"Verified bytes: {report['bytes_verified']}\n"
+                    f"SHA-256: {report['sha256']}\n\n"
+                    'The temporary download was deleted. No inbox receipt or game file was changed. '
+                    'This proves this one file transferred and passed checksum verification, not game compatibility.',
+                    parent=dialog)
+                return
             if kind=='error':
                 info.set(payload);return
             if kind=='download':
@@ -5576,6 +5607,47 @@ class App(tk.Tk):
                     events.put(('error',str(exc)))
                 except Exception:
                     events.put(('error','Provider listing failed; check your connection.'))
+            threading.Thread(target=work,daemon=True).start();dialog.after(100,poll)
+        def probe_file():
+            """Live mod.io ZIP transfer diagnostic, without staging or installing."""
+            if provider!='mod.io' or state['busy'] or len(tree.selection())!=1:return
+            reviewed_iid=tree.selection()[0]
+            try:
+                row=state['rows'][int(reviewed_iid)]
+                game=self.current()
+                uid,key,game_root,game_name=modio_context
+                key_digest=hashlib.sha256(key.encode()).digest()
+                if (not game or str(Path(game['root']).resolve())!=game_root
+                    or str(game.get('name') or '')!=game_name
+                    or self.provider_choice.get()!='mod.io'
+                    or self.provider_scope.get().strip()!=identity.split('/')[0]
+                    or self.modio_user_id.get().strip()!=uid
+                    or hashlib.sha256(self.provider_key.get().strip().encode()).digest()!=key_digest
+                    or not self.modio_verified
+                    or self.modio_verified[:3]!=(identity.split('/')[0],uid,key_digest)):
+                    raise modio_live_probe.ProbeError('mod.io game or session changed. Verify the game again.')
+                if row.get('size',0)>modio_live_probe.MAX_PROBE_BYTES:
+                    raise modio_live_probe.ProbeError('Choose a ZIP no larger than 64 MiB for the temporary download test.')
+            except (IndexError,KeyError,ValueError,TypeError,OSError) as exc:
+                messagebox.showwarning('mod.io temporary test',str(exc),parent=dialog)
+                return
+            if not messagebox.askyesno('Verify one mod.io download',
+                  'Download this ZIP into a temporary directory, verify its checksum, and delete it?\n\n'
+                  'Nothing will be installed or added to the Provider Inbox. '
+                  'This can transfer up to 64 MiB of data.',parent=dialog):
+                return
+            state['busy']=True;load_btn.configure(state='disabled');download_btn.configure(state='disabled')
+            if probe_btn is not None:probe_btn.configure(state='disabled')
+            info.set('Downloading and verifying one mod.io ZIP temporarily…')
+            def work():
+                try:
+                    report=modio_live_probe.probe_download(row,user_id=uid,api_key=key)
+                    events.put(('probe',(report,reviewed_iid,game_root,uid,key_digest)))
+                except (modio_live_probe.ProbeError,modio_files.ModioError,
+                        provider_downloads.DownloadError,provider_catalogues.ProviderError) as exc:
+                    events.put(('error',str(exc)))
+                except Exception:
+                    events.put(('error','Temporary mod.io download verification could not complete.'))
             threading.Thread(target=work,daemon=True).start();dialog.after(100,poll)
         def stage_file():
             if state['busy'] or not tree.selection():return
@@ -5621,6 +5693,9 @@ class App(tk.Tk):
         load_btn.pack(side='left')
         download_btn=ttk.Button(actions,text='Download selected to inbox',command=stage_file)
         download_btn.pack(side='left',padx=8)
+        probe_btn=(ttk.Button(actions,text='Test download (temporary)',command=probe_file)
+                   if provider=='mod.io' else None)
+        if probe_btn is not None:probe_btn.pack(side='left',padx=8)
         ttk.Button(actions,text='Official page ↗',command=lambda:webbrowser.open(ref['url'])).pack(side='left')
         ttk.Button(actions,text='Close',command=dialog.destroy).pack(side='right')
 
