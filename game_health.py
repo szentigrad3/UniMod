@@ -27,12 +27,12 @@ def summarize(game, health, issues, dependencies):
     )
     # Count SMAPI's richer dependency evidence rather than making assumptions
     # about DLL files. Game/SMAPI-provided dependencies may appear missing.
-    risk = sum(
+    risk = (sum(
         1 for item in dependencies if isinstance(item, dict)
         and item.get('required') is True
         and item.get('mod_enabled') is True
         and item.get('status') in _DEP_WARNINGS
-    )
+    ) if game.get('kind') == 'smapi' else 0)
     duplicates = counts['Duplicate enabled ID']
     unmanaged = max(0, int(health.get('unmanaged') or 0))
     total = max(0, int(health.get('folders') or 0))
