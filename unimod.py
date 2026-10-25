@@ -2347,10 +2347,12 @@ def safe_extract(z, dest):
         with z.open(m) as src, target.open('wb') as dst:shutil.copyfileobj(src,dst)
 
 def install_zip(game, archive):
-    base=mod_root(game);base.mkdir(parents=True,exist_ok=True)
+    base=mod_root(game)
     with tempfile.TemporaryDirectory(prefix='unimod-') as td:
         stage=Path(td)
         with zipfile.ZipFile(archive) as z:safe_extract(z,stage)
+        # Invalid, unsafe or corrupt ZIPs must never create game directories.
+        base.mkdir(parents=True,exist_ok=True)
         if game['kind']=='smapi':
             # Scan every packaged SMAPI identity, including nested content packs.
             # Do not use folder names as identities and do not create duplicate IDs.
@@ -2874,6 +2876,57 @@ def provider_install_preflight(game, receipt):
         return {'status':'Install new','detail':'New metadata-owned BepInEx package (no existing identity conflict).'}
     except (OSError,UnicodeError,ValueError,TypeError,zipfile.BadZipFile,RuntimeError,EOFError) as exc:
         return {'status':'Blocked','detail':'Unsafe or invalid package: '+str(exc)[:180]}
+
+
+def manual_zip_review(game, archive):
+    """Read-only review of a user-chosen ZIP using the existing preflight.
+
+    A local ZIP has no trusted provider receipt. Its contents and identity can
+    be checked, but its publisher's authenticity cannot be established.
+    """
+    if not isinstance(game,dict) or game.get('kind') not in ('smapi','bepinex','generic'):
+        return {'status':'Blocked','detail':'This game format has no supported manual ZIP installer.'}
+    path=Path(archive).expanduser()
+    try:
+        if path.is_symlink() or not path.is_file() or path.suffix.casefold()!='.zip':
+            return {'status':'Blocked','detail':'Select an existing ZIP file, not a symlink.'}
+        if not 0<path.stat().st_size<=provider_downloads.MAX_FILE:
+            return {'status':'Blocked','detail':'ZIP is empty or exceeds the 512 MiB limit.'}
+        receipt={
+            'provider':'Manual ZIP', 'archive':str(path.resolve(strict=True)),
+            'filename':path.name,'sha256':provider_staging.file_sha256(path),
+            'bytes':path.stat().st_size,'game_root':str(Path(game['root']).resolve()),
+            'dependencies':[],
+        }
+        # Check recorded checksum and ZIP integrity on this selected game.
+        provider_staging.inspect_receipt(receipt,game_root=game['root'])
+        if game['kind']=='generic':
+            return {'status':'Manual review only','detail':
+                    'This game has no supported mod-identity checker. The ZIP can only '
+                    'be copied as unverified files; no compatibility or rollback guarantee.',
+                    'receipt':receipt}
+        plan=provider_install_preflight(game,receipt)
+        if game['kind']=='bepinex' and plan.get('status')=='Unsupported archive':
+            layout=inspect_bepinex_archive(path)
+            if layout.get('status') in ('Multi-package ZIP','Ambiguous ZIP layout'):
+                return {'status':'Blocked','detail':layout.get('note') or 'Ambiguous BepInEx package.'}
+            # Preserve legacy metadata-free BepInEx ZIP installations, but never
+            # misrepresent their compatibility or update identities as verified.
+            with zipfile.ZipFile(path) as z:
+                members=z.infolist()
+                if len(members)>10000 or sum(i.file_size for i in members)>2*1024**3:
+                    return {'status':'Blocked','detail':'ZIP exceeds safe extraction limits.'}
+                dlls=[m for m in members if not m.is_dir() and
+                      m.filename.casefold().endswith('.dll')]
+            if dlls:
+                return {'status':'Manual review only','detail':
+                        'BepInEx DLLs found, but no reliable package identity. '
+                        'Source, compatibility and dependency safety are unverified. '
+                        'Updates and automatic rollback are unavailable for this ZIP.',
+                        'receipt':receipt}
+        return {**plan,'receipt':receipt}
+    except (OSError,ValueError,TypeError,zipfile.BadZipFile,RuntimeError) as exc:
+        return {'status':'Blocked','detail':'Could not safely review this ZIP: '+str(exc)[:160]}
 
 
 def provider_install_reviewed(game,receipt,*,receipt_path=None):
@@ -8031,13 +8084,60 @@ class App(tk.Tk):
             target=Path(m['path']) if m.get('is_folder_only') else Path(m['path']).parent
             subprocess.Popen(['xdg-open',str(target)])
     def install_archive(self):
+        """Never install a manually chosen ZIP without a compatibility review."""
         game=self.current()
-        if not game:messagebox.showinfo('Choose a game','Select a game first');return
-        p=filedialog.askopenfilename(filetypes=[('ZIP archives','*.zip')]);
-        if not p:return
+        if not game:
+            messagebox.showinfo('Choose a game','Select a game first.',parent=self)
+            return
+        archive=filedialog.askopenfilename(title='Choose downloaded mod ZIP',
+                                           filetypes=[('ZIP archives','*.zip')],parent=self)
+        if not archive:return
+        self.status.set('Reviewing downloaded ZIP before making any changes…')
+        review=manual_zip_review(game,archive)
+        status=review.get('status','Blocked')
+        if status=='Update existing':
+            self.inbox_folder.set(str(Path(archive).parent))
+            if messagebox.askyesno('Update found — backup required',
+                    'This ZIP matches a mod already installed. Updates need a '
+                    'recovery backup and version review.\n\n'
+                    'Open the Downloads update workflow for this ZIP?',
+                    parent=self):
+                self.show_page('Update Inbox')
+            return
+        if status not in ('Install new','Manual review only'):
+            messagebox.showwarning('ZIP not ready to install',
+                str(review.get('detail') or 'The package failed safety checks.'),
+                parent=self)
+            return
+        caution=('The package publisher and game compatibility cannot be '
+                 'verified from a manually downloaded ZIP.\n'
+                 'If the ZIP is metadata-free, updates may not be reversible.\n')
+        question=(f"Game: {game['name']}\nFile: {Path(archive).name}\n"
+                  f"Result: {status}\n\n{review.get('detail','')}\n\n"
+                  +caution+'\nClose the game first. Install this ZIP?')
+        if not messagebox.askyesno('Review mod installation',question,parent=self):
+            self.status.set('ZIP installation cancelled. No mods changed.')
+            return
+        current=self.current()
+        if not current or str(Path(current['root']).resolve())!=str(Path(game['root']).resolve()):
+            messagebox.showwarning('Game changed','Choose the ZIP again for the current game.',parent=self)
+            return
+        # Recheck the archive bytes, game, identity and dependency status after
+        # approval. Never reuse an outdated result from before confirmation.
+        now=manual_zip_review(current,archive)
+        if (now.get('status')!=status or
+            now.get('receipt',{}).get('sha256')!=review['receipt']['sha256'] or
+            now.get('receipt',{}).get('bytes')!=review['receipt']['bytes']):
+            messagebox.showwarning('ZIP changed','The download or installed mods changed. Review it again.',parent=self)
+            return
         try:
-            result=install_zip(game,p);self.refresh();messagebox.showinfo('Installed','Installed: '+', '.join(result))
-        except Exception as e:messagebox.showerror('Install failed',str(e))
+            result=install_zip(current,archive)
+            self.refresh()
+            messagebox.showinfo('Mod installed',
+                'Installed '+', '.join(result)+'. Review the game before playing.',
+                parent=self)
+        except Exception as exc:
+            messagebox.showerror('Install refused or failed',str(exc),parent=self)
     def install_url(self):
         game=self.current()
         if not game:messagebox.showinfo('Choose a game','Select a game first');return
