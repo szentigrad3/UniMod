@@ -24,6 +24,7 @@ import modio_diagnostics
 import modio_live_probe
 import modio_guide
 import modio_aio
+import game_health
 import provider_staging
 import minecraft_profiles
 import minecraft_dependencies
@@ -3216,6 +3217,8 @@ class App(tk.Tk):
         self.profile_menu.configure(menu=pm)
         ttk.Button(head,text='+ Install ZIP',command=self.install_archive,style='Top.TButton').pack(side='left',padx=4)
         ttk.Button(head,text='↻ Rescan',command=self.refresh,style='Top.TButton').pack(side='left',padx=4)
+        ttk.Button(head,text='Check My Mods',command=self.show_game_health,
+                   style='Top.TButton').pack(side='left',padx=4)
         ttk.Button(head,text='Check updates',command=lambda:self.show_page('Updates Available'),style='Top.TButton').pack(side='left',padx=4)
         ttk.Button(head,text='Scan games',command=self.auto_detect,style='Top.TButton').pack(side='right',padx=4)
         ttk.Button(head,text='+ Add game',command=self.add_game,style='Top.TButton').pack(side='right',padx=4)
@@ -7043,6 +7046,78 @@ class App(tk.Tk):
     def update_mod_action_buttons(self,active):
         for button in getattr(self,'mod_action_buttons',[]):
             button.configure(state='normal' if active else 'disabled')
+
+    def show_game_health(self):
+        """One-click, read-only health summary using existing UniMod audits."""
+        game=self.current()
+        if not game:
+            messagebox.showinfo('Check My Mods',
+                'Choose an installed game first. UniMod can then scan its existing mods.',
+                parent=self)
+            return
+        try:
+            mods=items(game)  # Always rescan rather than trusting stale UI rows.
+            health=existing_mod_health(game,mods)
+            issues=audit_mods(mods,game['kind'])
+            deps=smapi_dependency_report(mods) if game['kind']=='smapi' else []
+            summary=game_health.summarize(game,health,issues,deps)
+            safe=game_health.safe_report(summary)
+        except (OSError,ValueError,TypeError,KeyError) as exc:
+            messagebox.showwarning('Check My Mods',
+                'Could not inspect this installation safely. Check the game directory and rescan.',
+                parent=self)
+            return
+        dialog=tk.Toplevel(self)
+        dialog.title('Check My Mods — read-only')
+        width=min(680,max(570,self.winfo_screenwidth()-120))
+        dialog.geometry(f'{width}x490')
+        dialog.minsize(540,440)
+        dialog.transient(self)
+        frame=ttk.Frame(dialog,padding=(18,14))
+        frame.pack(fill='both',expand=True)
+        ttk.Label(frame,text='Check My Mods',style='Title.TLabel').pack(anchor='w')
+        ttk.Label(frame,text='Uses UniMod’s existing dependency, duplicate and folder audits. '
+                  'No mods are changed, installed or deleted.',
+                  wraplength=610).pack(anchor='w',pady=(5,9))
+        ttk.Label(frame,text=summary['status'],style='Section.TLabel').pack(anchor='w',pady=(0,8))
+        rows=ttk.Frame(frame)
+        rows.pack(fill='x')
+        for i,(label,value) in enumerate((
+            ('Installed packages / folders',summary['packages']),
+            ('Enabled folders',summary['enabled']),
+            ('Duplicate enabled mod IDs',summary['duplicates']),
+            ('Dependencies to review',summary['dependencies']),
+            ('Unrecognised packages',summary['unmanaged']))):
+            ttk.Label(rows,text=label).grid(row=i,column=0,sticky='w',pady=3,padx=(0,30))
+            ttk.Label(rows,text=str(value),style='Section.TLabel').grid(
+                row=i,column=1,sticky='e',pady=3)
+        ttk.Separator(frame).pack(fill='x',pady=(11,9))
+        description=('Some DLL-based game formats do not expose machine-readable dependency IDs. '
+                     'A clean scan therefore does not prove compatibility.'
+                     if summary['limited'] else
+                     'SMAPI built-in dependencies can appear missing. Treat flagged results as '
+                     'items to review, not automatic installation failures.')
+        ttk.Label(frame,text=description,wraplength=610).pack(anchor='w',pady=(0,12))
+        status=tk.StringVar(value='Read-only scan complete. No local paths are included in the copied report.')
+        ttk.Label(frame,textvariable=status,wraplength=610,
+                  style='Subtle.TLabel').pack(anchor='w')
+        actions=ttk.Frame(frame)
+        actions.pack(side='bottom',fill='x',pady=(14,0))
+        def go(page):
+            dialog.destroy()
+            self.show_page(page)
+        ttk.Button(actions,text='Installed Mods',command=lambda:go('Installed Mods')).pack(side='left')
+        if summary['kind']=='smapi':
+            ttk.Button(actions,text='Review Dependencies',
+                       command=lambda:go('Dependencies')).pack(side='left',padx=8)
+        ttk.Button(actions,text='Open Installation Audit',
+                   command=lambda:go('Installation Audit')).pack(side='left',padx=(0,8))
+        def copy_safe():
+            self.clipboard_clear()
+            self.clipboard_append(safe)
+            status.set('Privacy-safe report copied. Paste it into your issue or test report.')
+        ttk.Button(actions,text='Copy safe report',command=copy_safe).pack(side='left')
+        ttk.Button(actions,text='Close',command=dialog.destroy).pack(side='right')
 
     def current(self):
         if self.selected is None or self.selected>=len(self.data['games']):return None
