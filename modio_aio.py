@@ -14,7 +14,7 @@ import modio_selftest
 import modio_keyonly
 import provider_catalogues as catalogue
 
-RESULTS = ('Passed', 'Failed', 'Not tested', 'Not available')
+RESULTS = ('Passed', 'Failed', 'Not tested', 'Not available', 'Not verified')
 REQUIRED = ('installed', 'updated', 'backups', 'tamper_refused',
             'wrong_game_refused', 'bad_download_refused',
             'failed_update_restored', 'secrets_not_persisted')
@@ -147,7 +147,7 @@ def run_aio(game, *, game_id='', user_id='', api_key='', mod_id='',
             # The public API was reachable. The installed game is not
             # verifiably on mod.io, which does not invalidate API access.
             report['catalogue']='Passed'
-            report['game']='Not available'
+            report['game']='Not available' if code=='game_not_found' else 'Not verified'
             report['metadata']='Not available'
             report['download']='Not available'
             report['reason']=code
@@ -243,8 +243,8 @@ HELP = {
     'choose_game': 'Choose a supported game in UniMod, then run the test again.',
     'connect': 'Enter your private mod.io API key. Game selection is taken from UniMod.',
     'key_path_required': 'This key needs its unique mod.io API path. Key-only access was not accepted; no account ID was guessed.',
-    'game_not_found': 'Selected game is not listed on mod.io. Public catalogue access worked; your API key is not proven invalid.',
-    'ambiguous_game': 'Multiple or incomplete game matches: choose an unambiguous supported game before testing.',
+    'game_not_found': 'No exact mod.io listing found for the selected game. Public catalogue access worked; this does not establish the key is invalid.',
+    'ambiguous_game': 'Game match is ambiguous or incomplete. Public catalogue access worked, but this game was not verified.',
     'wrong_game': 'The mod.io game does not match your selected installed game.',
     'game_api': 'Game verification failed. Check your connection and credentials.',
     'choose_mod': 'Select a mod, or approve an automatic public ZIP test.',
@@ -254,7 +254,7 @@ HELP = {
     'transfer_not_approved': 'Temporary downloading was not approved; nothing was downloaded.',
     'download_failed': 'Temporary download failed verification. No game files changed.',
     'complete': 'Selected-game checks finished. The temporary ZIP was deleted; no game files changed.',
-    'provider_only_complete': 'Public mod.io ZIP verified using a different supported game. Your selected game is NOT supported by this result.',
+    'provider_only_complete': 'Public mod.io ZIP verified using a different supported game. This does NOT test your installed game or verify account ownership.',
     'provider_only_download_failed': 'Independent public mod.io ZIP download failed. Your installed game was not touched.',
     'provider_sample_unavailable': 'Selected game is not on mod.io, and no suitable independent public test ZIP was verified.',
 }
