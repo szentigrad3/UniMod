@@ -44,8 +44,10 @@ class ModioUserPath(unittest.TestCase):
             p.search_modio('Some mod',123,KEY,user_id=456,fetch=lambda *_:{'data':'bad'})
     def test_host_allowlist_accepts_unique_user_endpoint(self):
         self.assertEqual(p.fetch_json('https://u-456.modapi.io/v1/games/123',fetch=lambda *_:{'ok':True}),{'ok':True})
+    def test_allow_documented_public_read_only_host(self):
+        self.assertEqual(p.fetch_json('https://api.mod.io/v1/games',fetch=lambda *_:{'data':[]}),{'data':[]})
     def test_host_allowlist_rejects_impostors(self):
-        for hostname in ('u-0.modapi.io','u-123.modapi.io.evil.com','api.mod.io','u-123.modapi.io.evil.net'):
+        for hostname in ('u-0.modapi.io','u-123.modapi.io.evil.com','api.mod.io.evil.net','u-123.modapi.io.evil.net'):
             with self.subTest(hostname=hostname),self.assertRaises(p.ProviderError):
                 p.fetch_json('https://'+hostname+'/v1/games/1',fetch=lambda *_:self.fail('network'))
     def test_search_router_passes_user_id(self):

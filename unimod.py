@@ -5401,37 +5401,21 @@ class App(tk.Tk):
         container=ttk.Frame(dialog,padding=(18,16))
         container.pack(fill='both',expand=True)
         ttk.Label(container,text='Run All Tests',style='Title.TLabel').pack(anchor='w')
-        ttk.Label(container,text='Runs the built-in offline safety test first. With a valid mod.io connection '
-           'and an optional mod ID, it also checks releases and can verify one temporary ZIP download. '
+        ttk.Label(container,text='Choose a game in UniMod, paste your private API key, and press Run All Tests. '
+           'Offline safety checks run first, followed by exact game matching and an optional temporary ZIP test. '
            'It never installs anything or changes your games.',
            wraplength=580).pack(anchor='w',pady=(4,10))
-        try:
-            selection=self.provider_tree.selection()
-            item=self.provider_results[int(selection[0])] if len(selection)==1 else None
-            prefill=item.get('identity','') if isinstance(item,dict) and item.get('provider')=='mod.io' else ''
-        except (IndexError,KeyError,TypeError,ValueError,tk.TclError):
-            prefill=''
-        default_gid=self.provider_scope.get().strip()
-        default_mid=''
-        if isinstance(prefill,str) and re.fullmatch(r'[1-9][0-9]{0,11}/[1-9][0-9]{0,11}',prefill):
-            default_gid,default_mid=prefill.split('/')
         fields=ttk.Frame(container)
         fields.pack(fill='x')
-        game_id=tk.StringVar(value=default_gid)
-        user_id=tk.StringVar(value=self.modio_user_id.get().strip())
         secret=tk.StringVar(value=self.provider_key.get().strip())
-        mod_id=tk.StringVar(value=default_mid)
-        for row,(caption,var,masked) in enumerate((
-            ('mod.io Game ID',game_id,False),
-            ('mod.io API-path User ID',user_id,False),
-            ('Private API key (never saved)',secret,True),
-            ('Mod ID (optional; for ZIP test)',mod_id,False))):
-            ttk.Label(fields,text=caption).grid(row=row,column=0,sticky='w',pady=5,padx=(0,12))
-            entry=ttk.Entry(fields,textvariable=var,width=38,show='•' if masked else '')
-            entry.grid(row=row,column=1,sticky='ew',pady=5)
-        fields.columnconfigure(1,weight=1)
-        ttk.Label(container,text='The game and mod IDs come from mod.io. If you do not have them yet, '
-                  'run the offline check now and add them later. Your API key is used only during this session.',
+        ttk.Label(fields,text='Private mod.io API key').pack(side='left',padx=(0,12))
+        ttk.Entry(fields,textvariable=secret,show='•',width=44).pack(
+            side='left',fill='x',expand=True)
+        ttk.Label(container,text='That is the only detail you need to type. '
+                  'UniMod uses your selected installed game, looks up its exact mod.io '
+                  'identity and picks a small public test ZIP automatically. '
+                  'The API key stays in this session. Some newer mod.io keys need '
+                  'their unique API path and may not support key-only access.',
                   wraplength=580,style='Subtle.TLabel').pack(anchor='w',pady=(8,8))
         transfer=tk.BooleanVar(value=True)
         ttk.Checkbutton(container,
@@ -5469,30 +5453,38 @@ class App(tk.Tk):
             if approve:
                 approve=messagebox.askyesno('Approve temporary test download',
                     'UniMod may transfer one public ZIP up to 64 MiB for the verified game. '
-                    'When no Mod ID is entered, it will pick a public test mod automatically. '
+                    'UniMod will pick a public test mod automatically. '
                     'The ZIP will be verified and deleted, never installed. Continue?',
                     parent=dialog)
                 if not approve:
                     status.set('Download permission declined; offline and metadata checks can still run.')
             self._modio_aio_running=True
             start_btn.configure(state='disabled')
-            context=(game_id.get().strip(),user_id.get().strip(),secret.get().strip(),
-                     mod_id.get().strip())
+            key=secret.get().strip()
+            context=(key,)
             try:
                 current_game=self.current()
                 root=str(Path(current_game['root']).resolve()) if current_game else ''
                 game=dict(current_game) if isinstance(current_game,dict) else None
             except (OSError,ValueError,TypeError,KeyError):
                 root='';game=None
+            # Reuse a previously verified API path silently when available.
+            # Otherwise use the public documented key-only read-only route.
+            previous=self.modio_verified
+            known_gid=known_uid=''
+            if (game and isinstance(previous,tuple) and len(previous)>=4 and
+                previous[2]==hashlib.sha256(key.encode()).digest() and
+                re.sub('[^a-z0-9]','',str(previous[3]).casefold())==
+                re.sub('[^a-z0-9]','',str(game.get('name','')).casefold())):
+                known_gid,known_uid=previous[:2]
             events=queue.Queue()
             status.set('Starting safe tests…')
             def progress(stage):
                 events.put(('progress',stage))
             def worker():
                 try:
-                    result=modio_aio.run_aio(game,game_id=context[0],user_id=context[1],
-                            api_key=context[2],mod_id=context[3],
-                            allow_transfer=approve,progress=progress)
+                    result=modio_aio.run_aio(game,game_id=known_gid,user_id=known_uid,
+                            api_key=key,allow_transfer=approve,progress=progress)
                 except Exception:
                     result={'offline':'Failed','game':'Not tested','metadata':'Not tested',
                             'download':'Not tested','reason':'none'}
@@ -5514,8 +5506,7 @@ class App(tk.Tk):
                     now=self.current()
                     same_game=(bool(now) and str(Path(now['root']).resolve())==root
                          and now.get('name')==game.get('name')) if game else not bool(now)
-                    same_fields=context==(game_id.get().strip(),user_id.get().strip(),
-                                         secret.get().strip(),mod_id.get().strip())
+                    same_fields=context==(secret.get().strip(),)
                 except (OSError,ValueError,TypeError,KeyError):
                     same_game=False;same_fields=False
                 if not (same_game and same_fields):
@@ -5526,20 +5517,14 @@ class App(tk.Tk):
                 report.set(modio_aio.public_report(payload))
                 self._modio_offline_result=payload.get('offline','Failed')
                 if payload.get('game')=='Passed':
-                    digest=hashlib.sha256(context[2].encode()).digest()
-                    self.modio_verified=(context[0],context[1],digest,game['name'])
+                    self.provider_key.set(key)
                     self.provider_choice.set('mod.io')
-                    self.provider_scope.set(context[0])
-                    self.modio_user_id.set(context[1])
-                    self.provider_key.set(context[2])
-                    if context[3] and payload.get('metadata') in ('Passed','Failed'):
-                        self._modio_aio_selected={'provider':'mod.io',
-                                                  'identity':context[0]+'/'+context[3]}
-                        evidence=(root,context[0]+'/'+context[3],context[1],digest)
-                        for category,label in (('metadata','metadata'),('download','download')):
-                            if payload.get(label) in ('Passed','Failed'):
-                                self._modio_test_results[category]={
-                                    'context':evidence,'result':payload[label]}
+                    # Only retain a verified game/account path if one was
+                    # independently confirmed before this test. The key-only
+                    # API does not reveal a user ID and must not invent one.
+                    if known_gid and known_uid:
+                        self.modio_verified=(known_gid,known_uid,
+                            hashlib.sha256(key.encode()).digest(),game['name'])
                 status.set(modio_aio.HELP.get(payload.get('reason'),
                                               'Tests finished. Copy your safe report.'))
             threading.Thread(target=worker,daemon=True).start()

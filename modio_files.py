@@ -24,10 +24,12 @@ def _identity(value):
 
 
 def _base(user_id, api_key):
-    uid=catalogue.numeric(user_id)
     if not isinstance(api_key,str) or len(api_key.strip())<8:
         raise ModioError('Enter your mod.io session key.')
-    return f'https://u-{uid}.modapi.io/v1'
+    # The documented legacy public API host supports key-only GET routes when
+    # available. Newer account-scoped keys may require their unique API path.
+    return (f'https://u-{catalogue.numeric(user_id)}.modapi.io/v1'
+            if user_id is not None else 'https://api.mod.io/v1')
 
 
 def _parse_modfile(data, game, mod):

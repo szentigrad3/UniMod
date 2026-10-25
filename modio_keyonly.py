@@ -1,0 +1,54 @@
+"""Resolve a selected installed game's public mod.io ID without asking for IDs.
+
+This uses the documented legacy/global public GET catalogue endpoint. Some
+account-scoped keys only work on their issued unique API path; in that case
+return an explicit unsupported/connection outcome, never guess an account ID.
+"""
+import re
+from urllib.parse import urlencode
+import provider_catalogues as catalogue
+
+
+class ResolutionError(ValueError):
+    pass
+
+
+def _normal(name):
+    return re.sub('[^a-z0-9]', '', str(name or '').casefold())
+
+
+def resolve_game(game, api_key, *, fetch=None):
+    """Require one unambiguous exact-name game match from a complete page."""
+    if not isinstance(game, dict) or game.get('kind') not in ('smapi','bepinex'):
+        raise ResolutionError('choose_game')
+    name=game.get('name')
+    if not isinstance(name,str) or not 2 <= len(name.strip()) <= 120:
+        raise ResolutionError('choose_game')
+    if not isinstance(api_key,str) or len(api_key.strip())<8:
+        raise ResolutionError('connect')
+    # Do not use /me: it requires OAuth, not an API key.
+    query=urlencode({'api_key':api_key.strip(),'_q':name.strip(),'_limit':100})
+    try:
+        page=catalogue.fetch_json('https://api.mod.io/v1/games?'+query,fetch=fetch)
+    except Exception:
+        raise ResolutionError('key_path_required') from None
+    if not isinstance(page,dict) or not isinstance(page.get('data'),list):
+        raise ResolutionError('game_api')
+    rows=page['data']
+    try:
+        total=int(page.get('result_total',len(rows)))
+    except (ValueError,TypeError,OverflowError):
+        raise ResolutionError('ambiguous_game') from None
+    # A truncated response cannot prove uniqueness. Decline to guess.
+    if total>len(rows):
+        raise ResolutionError('ambiguous_game')
+    found=set()
+    for item in rows:
+        if not isinstance(item,dict) or _normal(item.get('name'))!=_normal(name):
+            continue
+        ident=str(item.get('id') or '')
+        if re.fullmatch(r'[1-9][0-9]{0,11}',ident):
+            found.add(ident)
+    if len(found)!=1:
+        raise ResolutionError('ambiguous_game' if len(found)>1 else 'game_not_found')
+    return next(iter(found))
