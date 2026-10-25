@@ -2347,10 +2347,12 @@ def safe_extract(z, dest):
         with z.open(m) as src, target.open('wb') as dst:shutil.copyfileobj(src,dst)
 
 def install_zip(game, archive):
-    base=mod_root(game);base.mkdir(parents=True,exist_ok=True)
+    base=mod_root(game)
     with tempfile.TemporaryDirectory(prefix='unimod-') as td:
         stage=Path(td)
         with zipfile.ZipFile(archive) as z:safe_extract(z,stage)
+        # Invalid, unsafe or corrupt ZIPs must never create game directories.
+        base.mkdir(parents=True,exist_ok=True)
         if game['kind']=='smapi':
             # Scan every packaged SMAPI identity, including nested content packs.
             # Do not use folder names as identities and do not create duplicate IDs.
@@ -2905,6 +2907,9 @@ def manual_zip_review(game, archive):
                     'receipt':receipt}
         plan=provider_install_preflight(game,receipt)
         if game['kind']=='bepinex' and plan.get('status')=='Unsupported archive':
+            layout=inspect_bepinex_archive(path)
+            if layout.get('status') in ('Multi-package ZIP','Ambiguous ZIP layout'):
+                return {'status':'Blocked','detail':layout.get('note') or 'Ambiguous BepInEx package.'}
             # Preserve legacy metadata-free BepInEx ZIP installations, but never
             # misrepresent their compatibility or update identities as verified.
             with zipfile.ZipFile(path) as z:
@@ -8094,7 +8099,7 @@ class App(tk.Tk):
             self.inbox_folder.set(str(Path(archive).parent))
             if messagebox.askyesno('Update found — backup required',
                     'This ZIP matches a mod already installed. Updates need a '
-                    'recovery backup and version review.\\n\\n'
+                    'recovery backup and version review.\n\n'
                     'Open the Downloads update workflow for this ZIP?',
                     parent=self):
                 self.show_page('Update Inbox')
@@ -8105,11 +8110,11 @@ class App(tk.Tk):
                 parent=self)
             return
         caution=('The package publisher and game compatibility cannot be '
-                 'verified from a manually downloaded ZIP.\\n'
-                 'If the ZIP is metadata-free, updates may not be reversible.\\n')
-        question=(f"Game: {game['name']}\\nFile: {Path(archive).name}\\n"
-                  f"Result: {status}\\n\\n{review.get('detail','')}\\n\\n"
-                  +caution+'\\nClose the game first. Install this ZIP?')
+                 'verified from a manually downloaded ZIP.\n'
+                 'If the ZIP is metadata-free, updates may not be reversible.\n')
+        question=(f"Game: {game['name']}\nFile: {Path(archive).name}\n"
+                  f"Result: {status}\n\n{review.get('detail','')}\n\n"
+                  +caution+'\nClose the game first. Install this ZIP?')
         if not messagebox.askyesno('Review mod installation',question,parent=self):
             self.status.set('ZIP installation cancelled. No mods changed.')
             return
