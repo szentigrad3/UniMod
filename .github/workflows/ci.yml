@@ -41,3 +41,4 @@ jobs:
           xvfb-run -a .buildvenv/bin/python gui_modio_download_smoke_v055.py
           xvfb-run -a .buildvenv/bin/python gui_modio_managed_smoke_v056.py
           xvfb-run -a .buildvenv/bin/python gui_modio_diagnostic_smoke_v056.py
+          xvfb-run -a .buildvenv/bin/python gui_modio_live_probe_smoke_v056.py

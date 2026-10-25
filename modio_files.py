@@ -137,6 +137,7 @@ def refresh_selected(record, *, user_id, api_key, fetch=None):
     return row
 
 
-def download_selected(record, directory, *, user_id, api_key, fetch=None, opener=None):
+def download_selected(record, directory, *, user_id, api_key, fetch=None, opener=None,
+                      max_size=provider_downloads.MAX_FILE):
     new=refresh_selected(record,user_id=user_id,api_key=api_key,fetch=fetch)
-    return provider_downloads.download_file(new,directory,opener=opener)
+    return provider_downloads.download_file(new,directory,opener=opener,max_size=max_size)
