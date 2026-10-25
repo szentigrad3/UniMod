@@ -25,7 +25,7 @@ class SimpleUpdatesTests(unittest.TestCase):
         self.assertIn('backups_for_game(game)',piece)
         self.assertIn('still_there=any(',piece)
         self.assertIn("messagebox.askyesno(",piece)
-        self.assertIn('restore_backup(current,entry)',piece)
+        self.assertIn('restore_backup(current,entry,record_displaced=True)',piece)
 
 if __name__=='__main__':
     unittest.main()
