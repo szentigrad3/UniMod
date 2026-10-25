@@ -33,6 +33,8 @@ On Arch/CachyOS, Tkinter is usually supplied by the system Python package. Optio
 
 Open **Discover → Run All Tests…** after selecting an installed supported SMAPI/BepInEx game. **Paste only your private mod.io API key**; there are no Game ID, User ID or Mod ID fields. UniMod automatically runs the disposable offline installation/update/rollback simulation, looks up the selected game's **exact** public mod.io name and ID (never guesses from a partial match), and when you approve the temporary transfer, finds a small public ZIP and verifies its checksum. The test ZIP is deleted. It does not stage or install anything, and a redacted report can be copied for bug reports.
 
+**If the selected game is not listed on mod.io**, that is *not* automatically an API key failure. Run All Tests now distinguishes public catalogue connectivity from selected-game availability. With your approval, it can verify a small public ZIP from **another** supported mod.io game, marked **Provider-only (different game)**. That proves only an independent provider download, not compatibility with your installed game. No mods are staged or installed.
+
 **Important limitation:** mod.io's current API documentation recommends a unique user-specific API path that cannot be derived from an API key alone. UniMod uses the documented public key-only GET route if available, or reuses an already verified in-memory API path. Some personal keys may not support the public route; UniMod reports that limitation rather than inventing a user ID or declaring success. For those keys, the existing advanced **Discover → Verify mod.io game ID** connection remains available. Private keys are never included in reports or saved by the AIO tester.
 
 ## New tester? Start here (v0.56 development)

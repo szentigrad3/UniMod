@@ -5402,8 +5402,9 @@ class App(tk.Tk):
         container.pack(fill='both',expand=True)
         ttk.Label(container,text='Run All Tests',style='Title.TLabel').pack(anchor='w')
         ttk.Label(container,text='Choose a game in UniMod, paste your private API key, and press Run All Tests. '
-           'Offline safety checks run first, followed by exact game matching and an optional temporary ZIP test. '
-           'It never installs anything or changes your games.',
+           'Offline safety checks run first, followed by mod.io catalogue access and an optional temporary ZIP test. '
+           'A game missing from mod.io is reported as unavailable, not as an invalid API key. '
+           'Nothing is installed or changed.',
            wraplength=580).pack(anchor='w',pady=(4,10))
         fields=ttk.Frame(container)
         fields.pack(fill='x')
@@ -5413,13 +5414,14 @@ class App(tk.Tk):
             side='left',fill='x',expand=True)
         ttk.Label(container,text='That is the only detail you need to type. '
                   'UniMod uses your selected installed game, looks up its exact mod.io '
-                  'identity and picks a small public test ZIP automatically. '
-                  'The API key stays in this session. Some newer mod.io keys need '
+                  'identity where available. If it is not listed, an approved temporary '
+                  'ZIP can test mod.io using a DIFFERENT public game, never your installation. '
+                  'The key stays in this session. Some newer keys need '
                   'their unique API path and may not support key-only access.',
                   wraplength=580,style='Subtle.TLabel').pack(anchor='w',pady=(8,8))
         transfer=tk.BooleanVar(value=True)
         ttk.Checkbutton(container,
-            text='Test one public ZIP download (maximum 64 MiB, deleted after checking)',
+            text='Test public mod.io ZIP (may be another game; 64 MiB maximum, then deleted)',
             variable=transfer).pack(anchor='w')
         status=tk.StringVar(value='Ready. No files have been changed.')
         ttk.Label(container,textvariable=status,wraplength=590,
@@ -5452,9 +5454,11 @@ class App(tk.Tk):
             approve=bool(transfer.get())
             if approve:
                 approve=messagebox.askyesno('Approve temporary test download',
-                    'UniMod may transfer one public ZIP up to 64 MiB for the verified game. '
-                    'UniMod will pick a public test mod automatically. '
-                    'The ZIP will be verified and deleted, never installed. Continue?',
+                    'UniMod may transfer one public ZIP up to 64 MiB to test downloads. '
+                    'If your selected game has no mod.io listing, UniMod may choose a mod '
+                    'from a DIFFERENT supported game for a provider-only test. '
+                    'It will never install, stage or associate that ZIP with your game. '
+                    'The ZIP will be verified and deleted. Continue?',
                     parent=dialog)
                 if not approve:
                     status.set('Download permission declined; offline and metadata checks can still run.')

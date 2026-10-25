@@ -58,3 +58,7 @@ Click **Run built-in safety test** inside **Help me test mod.io…**. The GUI ru
 ## v0.56 AIO API-key-only input
 
 **Run All Tests…** now exposes a single masked **mod.io API key** input. It uses UniMod's selected installed game, checks for one unique public game match, and automatically selects an eligible ZIP only with explicit temporary download consent. Reuses an already verified account API path from the current session where possible. This key-only path uses the documented legacy public read-only mod.io API; some account-scoped keys may require their unique API path and cannot be verified from the key alone. Such a failure is reported clearly; the app never guesses user identities or performs installs. Private keys and signed URLs remain excluded from copyable reports.
+
+### Unsupported selected games are not API authentication failures
+
+The AIO key-only tester distinguishes **Public mod.io catalogue access: Passed** from **Official game verification: Not available** when a valid public catalogue response has no exact selected-game match. This does not prove the key invalid. With explicit approval, a separate bounded provider-only test can verify one small public ZIP from **a different mod.io game** and delete it. The report labels the result **Provider-only (different game)**, never compatibility or an installation for the selected game. A game lookup that is incomplete or ambiguous is **Not verified**. Authentication/path errors remain separate.
