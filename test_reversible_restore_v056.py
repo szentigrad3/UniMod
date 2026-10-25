@@ -42,7 +42,11 @@ class ReversibleRestoreTests(unittest.TestCase):
         self.assertTrue(prior.is_dir())
         self.assertEqual(self.installed_version(),'1.0')
         to_redo=unimod.backups_for_game(self.game)
-        self.assertEqual(len(to_redo),1)
+        self.assertEqual(unimod.smapi_manifest(prior)['uid'],'test.example')
+        self.assertTrue(prior.with_name(prior.name+'.unimod.json').is_file(),
+                        'Displaced copy is missing its new backup metadata')
+        self.assertEqual(len(to_redo),1,
+                         [p.name for p in (self.base/'config'/'backups').iterdir()])
         self.assertEqual(to_redo[0]['backup_path'],str(prior))
         self.assertEqual(to_redo[0]['kind'],'smapi')
         self.assertEqual(unimod.smapi_manifest(prior)['version'],'2.0')
