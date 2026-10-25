@@ -34,10 +34,10 @@ with tempfile.TemporaryDirectory() as temp:
         'bytes':archive.stat().st_size,'game_root':str(root),
         'version':'1.0.0','dependencies':[]}
     rowset=[receipt]
-    with patch.object(unimod,'CONFIG',base/'games.json'), \\
-         patch.object(unimod,'SOURCE_OVERRIDES',base/'sources.json'), \\
-         patch.object(unimod,'detect_games',return_value=[]), \\
-         patch.object(unimod.provider_staging,'read_staged',side_effect=lambda _:list(rowset)), \\
+    with patch.object(unimod,'CONFIG',base/'games.json'), \
+         patch.object(unimod,'SOURCE_OVERRIDES',base/'sources.json'), \
+         patch.object(unimod,'detect_games',return_value=[]), \
+         patch.object(unimod.provider_staging,'read_staged',side_effect=lambda _:list(rowset)), \
          patch.object(unimod,'provider_install_reviewed',
                       side_effect=AssertionError('Installation must require approval')):
         unimod.cfg_save({'games':[{'name':'Stardew Valley','root':str(root),'kind':'smapi'}]})
@@ -82,7 +82,7 @@ with tempfile.TemporaryDirectory() as temp:
             other=base/'Other Game';other.mkdir()
             app.data['games'].append({'name':'Other Game','root':str(other),'kind':'bepinex'})
             app.selected=1
-            with patch.object(unimod.messagebox,'showwarning') as warning, \\
+            with patch.object(unimod.messagebox,'showwarning') as warning, \
                  patch.object(app,'provider_stage_install') as handoff:
                 app.downloads_install_selected()
                 warning.assert_called_once()
