@@ -90,7 +90,8 @@ with TemporaryDirectory() as temp:
                 action.invoke()
                 assert info.called
             assert json.loads((moddir/'manifest.json').read_text())['Version']=='1.0'
-            assert len(list((base/'app'/'backups').glob('*-pre-restore-*')))==1
+            assert len([p for p in (base/'app'/'backups').glob('*-pre-restore-*') if p.is_dir()])==1
+            assert len(unimod.backups_for_game(game))==1
             print('UNIMOD_SIMPLE_UPDATES_RESTORE_GUI_OK')
         finally:
             app.destroy()
