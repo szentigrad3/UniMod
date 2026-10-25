@@ -2,6 +2,8 @@
 """Virtual Linux GUI smoke for beginner mod.io guide and safe report clipboard."""
 import hashlib
 import tempfile
+import time
+import modio_selftest
 from pathlib import Path
 from unittest.mock import patch
 
@@ -43,7 +45,7 @@ with tempfile.TemporaryDirectory() as folder:
             buttons={b.cget('text'):b for b in widgets(guide,'TButton')}
             expected={'Choose game','Set up / verify','Search mods',
                       'Run metadata check','Open release files','Open Provider Inbox',
-                      'Copy safe test report','Refresh steps','Close'}
+                      'Copy safe test report','Run built-in safety test','Refresh steps','Close'}
             assert expected.issubset(buttons), sorted(expected-set(buttons))
             buttons['Copy safe test report'].invoke()
             report=app.clipboard_get()
@@ -69,7 +71,28 @@ with tempfile.TemporaryDirectory() as folder:
             buttons['Copy safe test report'].invoke()
             assert 'Metadata check: Not tested' in app.clipboard_get()
             assert 'Temporary download check: Not tested' in app.clipboard_get()
+            # A tester can run the existing headless safety check without the terminal.
+            pass_checks={name:1 for name in ('installed','updated','backups','tamper_refused',
+               'wrong_game_refused','bad_download_refused','failed_update_restored',
+               'secrets_not_persisted')}
+            with patch.object(modio_selftest,'run',return_value=pass_checks) as run:
+                buttons['Run built-in safety test'].invoke()
+                until=time.monotonic()+6
+                while app._modio_offline_busy and time.monotonic()<until:
+                    app.update();time.sleep(.04)
+                assert not app._modio_offline_busy and run.called
+            buttons['Copy safe test report'].invoke()
+            assert 'Built-in offline safety test: Passed' in app.clipboard_get()
+            with patch.object(modio_selftest,'run',side_effect=ValueError('simulated')) as run:
+                buttons['Run built-in safety test'].invoke()
+                until=time.monotonic()+6
+                while app._modio_offline_busy and time.monotonic()<until:
+                    app.update();time.sleep(.04)
+                assert not app._modio_offline_busy and run.called
+            buttons['Copy safe test report'].invoke()
+            assert 'Built-in offline safety test: Failed' in app.clipboard_get()
+            assert KEY not in app.clipboard_get()
             buttons['Close'].invoke()
-            print('PASS: beginner mod.io guide, navigation buttons, redacted session-bound report')
+            print('PASS: beginner guide, one-click offline safety check, and redacted report')
         finally:
             app.destroy()
