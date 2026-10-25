@@ -3053,7 +3053,7 @@ def backups_for_game(game):
         except (OSError,ValueError,KeyError,TypeError):continue
     return result
 
-def restore_backup(game,entry):
+def restore_backup(game,entry,*,record_displaced=False):
     if game['kind'] not in ('smapi','bepinex'):raise ValueError('Unsupported backup format')
     if entry.get('kind','smapi')!=game['kind']:raise ValueError('Backup type does not match selected game')
     if entry.get('game_root')!=str(Path(game['root']).resolve()):raise ValueError('Backup belongs to a different game')
@@ -3086,7 +3086,7 @@ def restore_backup(game,entry):
     # merely an unexplained recovery folder. Only register a copy whose exact
     # package identity matches the restored mod. Restore succeeded even if
     # optional history registration fails: never retry file moves implicitly.
-    if previous and previous.is_dir():
+    if record_displaced and previous and previous.is_dir():
         try:
             if game['kind']=='smapi':
                 installed_info=smapi_manifest(previous)
@@ -8204,7 +8204,7 @@ class App(tk.Tk):
                 current=self.current()
                 if not current or str(Path(current['root']).resolve())!=root:
                     raise ValueError('Game changed before restoration. No files were changed.')
-                old=restore_backup(current,entry)
+                old=restore_backup(current,entry,record_displaced=True)
                 window.destroy()
                 self.refresh()
                 self.status.set('Mod backup restored. Current version was preserved separately.')
