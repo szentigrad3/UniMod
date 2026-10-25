@@ -57,6 +57,10 @@ def run_aio(game, *, game_id='', user_id='', api_key='', mod_id='',
     legacy = (isinstance(game_id,str) and isinstance(user_id,str) and
               re.fullmatch(r'[1-9][0-9]{0,11}',game_id) and
               re.fullmatch(r'[1-9][0-9]{0,11}',user_id))
+    # Explicit but malformed legacy account IDs are never silently ignored.
+    if (game_id or user_id) and not legacy:
+        report['reason'] = 'connect'
+        return report
     _emit(progress, 'game')
     try:
         if legacy:
