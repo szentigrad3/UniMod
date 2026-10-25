@@ -4333,7 +4333,7 @@ class App(tk.Tk):
         if expanded:
             self.mod_advanced_tools.pack(fill='x',after=self.filter_entry.master,pady=(0,8))
             self.tree.configure(displaycolumns=('author','source','version','status','update','id'))
-            self.mod_horizontal_scroll.pack(side='bottom',fill='x')
+            self.mod_horizontal_scroll.pack(side='bottom',fill='x',before=self.tree)
             self.mod_advanced_button.configure(text='Simple view  ▴')
         else:
             self.mod_advanced_tools.pack_forget()
