@@ -63,6 +63,15 @@ class GuideTests(unittest.TestCase):
         self.assertIn('Metadata check: Not tested',report)
         self.assertIn('Real installation/rollback: Not tested',report)
 
+    def test_offline_safety_status_stays_redacted(self):
+        state=self.state()
+        state['offline_test']='Passed'
+        self.assertIn('Built-in offline safety test: Passed',safe_report(state))
+        state['offline_test']='private-key:'+KEY
+        report=safe_report(state)
+        self.assertIn('Built-in offline safety test: Not tested',report)
+        self.assertNotIn(KEY,report)
+
     def test_untrusted_results_are_not_interpolated(self):
         state=self.state()
         state['metadata_test']='secret:'+KEY
