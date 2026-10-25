@@ -3257,7 +3257,7 @@ class App(tk.Tk):
             self.rail_buttons[page]=button
             self.attach_tooltip(button,title)
         ttk.Separator(rail).pack(fill='x',pady=12)
-        self.tools_button=ttk.Menubutton(rail,text='⚙  Advanced tools  ▾',width=17,
+        self.tools_button=ttk.Menubutton(rail,text='⚙  Advanced tools  ▾',width=20,
                                          style='SideTool.TMenubutton')
         self.tools_button.pack(fill='x',ipady=5)
         self.attach_tooltip(self.tools_button,'Advanced features and troubleshooting')
@@ -3272,17 +3272,28 @@ class App(tk.Tk):
                   style='Subtle.TLabel',wraplength=850).pack(anchor='w',pady=(4,0))
         self.overview_subtitle=tk.StringVar(value='Choose a game to inspect your mods.')
         ttk.Label(overview_heading,textvariable=self.overview_subtitle,style='Subtle.TLabel',wraplength=850).pack(anchor='w',pady=(4,0))
+        self.home_empty=ttk.Frame(dashboard)
+        ttk.Label(self.home_empty,text='Getting started',style='Section.TLabel').pack(anchor='w',pady=(0,6))
+        ttk.Label(self.home_empty,text='Already have games installed? UniMod can look for them. You can also add a game yourself.',
+                  style='Subtle.TLabel',wraplength=730).pack(anchor='w',pady=(0,10))
+        ttk.Button(self.home_empty,text='Find my installed games',command=self.auto_detect,
+                   style='Accent.TButton').pack(side='left',padx=(0,10))
+        ttk.Button(self.home_empty,text='Add a game manually',command=self.add_game).pack(side='left')
         # Focus the dashboard on three key numbers, not six giant metric cards.
         summary=ttk.Frame(dashboard);summary.pack(fill='x',pady=(0,8))
         for c in range(3):summary.columnconfigure(c,weight=1,uniform='metrics')
         self.stat_labels={}
-        for idx,label in enumerate(('Mod folders','Enabled folders','Known sources')):
+        for idx,(label,title) in enumerate((('Mod folders','Mods found'),
+                                             ('Enabled folders','Enabled'),
+                                             ('Known sources','Known downloads'))):
             panel=ttk.Frame(summary,style='Card.TFrame',padding=(18,12))
             panel.grid(row=0,column=idx,sticky='nsew',padx=(0,10))
-            ttk.Label(panel,text=label.upper(),style='CardCaption.TLabel').pack(anchor='w')
+            ttk.Label(panel,text=title.upper(),style='CardCaption.TLabel').pack(anchor='w')
             val=ttk.Label(panel,text='—',style='Metric.TLabel');val.pack(anchor='w',pady=(6,0))
             self.stat_labels[label]=val
-        secondary=ttk.Frame(dashboard);secondary.pack(fill='x',pady=(4,15))
+        # Preserve these diagnostics for existing internal callers, but do not
+        # put technical counters on the first screen.
+        secondary=ttk.Frame(dashboard)
         for label in ('Indexed IDs','Metadata pending','Audit warnings'):
             cell=ttk.Frame(secondary);cell.pack(side='left',padx=(0,25))
             ttk.Label(cell,text=label+': ',style='Subtle.TLabel').pack(side='left')
@@ -3298,10 +3309,11 @@ class App(tk.Tk):
         ttk.Label(dashboard,text='Viewing or checking mods never installs, deletes or changes your files.',
                   style='Subtle.TLabel').pack(anchor='w',pady=(0,12))
         sub=ttk.Frame(dashboard);sub.pack(fill='x',pady=(0,8))
-        ttk.Label(sub,text='Installed packages',style='Section.TLabel').pack(side='left')
+        ttk.Label(sub,text='A look at your installed mods',style='Section.TLabel').pack(side='left')
         ttk.Label(sub,text='Read-only overview',style='Subtle.TLabel').pack(side='right')
         overview_area=ttk.Frame(dashboard);overview_area.pack(fill='both',expand=True)
-        self.overview_tree=ttk.Treeview(overview_area,columns=('name','type','count','enabled'),show='headings',selectmode='browse')
+        self.overview_tree=ttk.Treeview(overview_area,columns=('name','type','count','enabled'),
+                                        show='headings',selectmode='browse',height=7)
         for name,title,width in [('name','Mod / package',300),('type','Type',160),('count','DLLs',65),('enabled','State',115)]:
             self.overview_tree.heading(name,text=title)
             self.overview_tree.column(name,width=width,stretch=(name=='name'))
@@ -4235,8 +4247,12 @@ class App(tk.Tk):
         mods=self.rows if game else []
         packages=mod_packages(game,mods) if game else []
         health=existing_mod_health(game,mods) if game else {}
-        self.overview_subtitle.set((f"{game['name']}  ·  {game['kind'].upper()} mods detected" if game else
-                                   'No game selected yet. Choose a game above, or use + Add game to begin.'))
+        self.overview_subtitle.set((f"{game['name']}  ·  {game['kind'].upper()} mod format" if game else
+                                   'No game selected yet. Choose a game above to get started.'))
+        if game:
+            self.home_empty.pack_forget()
+        else:
+            self.home_empty.pack(fill='x',pady=(0,18),before=self.stat_labels['Mod folders'].master.master)
         for label,key in [('Mod folders','folders'),('Enabled folders','enabled_folders'),('Indexed IDs','mods'),('Metadata pending','unmanaged'),('Known sources','sources'),('Audit warnings','issues')]:
             self.stat_labels[label].configure(text=str(health[key]) if game else '—')
         self.overview_tree.delete(*self.overview_tree.get_children())
