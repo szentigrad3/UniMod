@@ -3207,6 +3207,7 @@ class App(tk.Tk):
         self.source_candidate_target=None
         self._queue_events=queue.Queue()
         self._provider_events=queue.Queue()
+        self._downloads_review_events=queue.Queue()
         self._stage_running=False
         self._nexus_batch_remaining=0
         self._nexus_cancel_event=None
@@ -3417,9 +3418,43 @@ class App(tk.Tk):
                   style='Muted.TLabel',wraplength=800).pack(anchor='w',pady=(0,8))
         self.downloads_provider_summary=tk.StringVar(value='Checking downloaded files…')
         ttk.Label(provider_group,textvariable=self.downloads_provider_summary,
-                  style='Muted.TLabel').pack(anchor='w',pady=(0,10))
-        ttk.Button(provider_group,text='Review provider downloads',
-                   command=self.provider_review_downloads,style='Accent.TButton').pack(anchor='w')
+                  style='Muted.TLabel').pack(anchor='w',pady=(0,7))
+        # Show the already-verified staging journal, not a second installer or
+        # filenames found by guessing. This table is read-only.
+        list_area=ttk.Frame(provider_group,style='Card.TFrame')
+        list_area.pack(fill='x',pady=(0,7))
+        self.downloads_tree=ttk.Treeview(list_area,
+            columns=('provider','file','version','for_game'),show='headings',
+            selectmode='browse',height=4)
+        for col,label,width in (
+                ('provider','Website',105),('file','Downloaded file',330),
+                ('version','Version',105),('for_game','Game',195)):
+            self.downloads_tree.heading(col,text=label)
+            self.downloads_tree.column(col,width=width,stretch=col=='file')
+        self.downloads_tree.pack(side='left',fill='x',expand=True)
+        list_scroll=ttk.Scrollbar(list_area,command=self.downloads_tree.yview)
+        list_scroll.pack(side='right',fill='y')
+        self.downloads_tree.configure(yscrollcommand=list_scroll.set)
+        self.downloads_tree.bind('<<TreeviewSelect>>',
+                                 lambda *_:self.downloads_selection_changed())
+        self.downloads_tree.bind('<Double-1>',
+                                 lambda *_:self.downloads_check_selected())
+        self.downloads_info=tk.StringVar(
+            value='Select a downloaded file, then check it. Your game will not be changed.')
+        ttk.Label(provider_group,textvariable=self.downloads_info,
+                  style='Muted.TLabel',wraplength=840).pack(anchor='w',pady=(1,6))
+        row=ttk.Frame(provider_group,style='Card.TFrame')
+        row.pack(fill='x')
+        self.downloads_check_button=ttk.Button(
+            row,text='Check selected file',command=self.downloads_check_selected,
+            style='Accent.TButton')
+        self.downloads_check_button.pack(side='left',padx=(0,9))
+        self.downloads_install_button=ttk.Button(
+            row,text='Review & install…',command=self.downloads_install_selected,
+            state='disabled')
+        self.downloads_install_button.pack(side='left',padx=(0,9))
+        ttk.Button(row,text='More download options…',
+                   command=self.provider_review_downloads).pack(side='left')
         nexus_group=ttk.Frame(downloads_home,style='Card.TFrame',padding=(20,18))
         nexus_group.pack(fill='x',pady=(0,12))
         ttk.Label(nexus_group,text='Nexus links and downloaded ZIP updates',
@@ -6285,6 +6320,139 @@ class App(tk.Tk):
                 f'No newer or unverified alternative ZIP releases were found among the queried results for {count} tracked mod(s). '
                 f'{errors} request(s) failed. Filtered or failed listings do not prove a mod is up to date.',parent=self)
 
+    @staticmethod
+    def _download_receipt_identity(record):
+        """Bind a reviewed selection to one exact provider receipt, not its row."""
+        return tuple(record.get(k) for k in (
+            'provider','archive','filename','sha256','bytes','game_root','identity','version'))
+
+    def downloads_selection_changed(self):
+        """Invalidate only when selection identity really changes.
+
+        Tk may deliver a pending selection event just after the Review button
+        callback; that event must not invalidate the very same file's review.
+        """
+        if not hasattr(self,'downloads_tree'):return
+        selected=self.downloads_tree.selection()
+        try:
+            identity=(selected[0],self._download_receipt_identity(
+                self.provider_stage_rows[int(selected[0])])) if len(selected)==1 else None
+        except (ValueError,TypeError,IndexError,KeyError):
+            identity=None
+        if identity is not None and identity==getattr(self,'_downloads_last_selection',None):
+            return
+        self._downloads_last_selection=identity
+        self._downloads_review_ticket=getattr(self,'_downloads_review_ticket',0)+1
+        self._downloads_approved=None
+        self.downloads_install_button.configure(state='disabled')
+        if self.downloads_tree.selection():
+            self.downloads_info.set('Check this file before installing. No game files will be changed.')
+        else:
+            self.downloads_info.set('Select a downloaded file, then check it. Nothing is installed automatically.')
+
+    def downloads_check_selected(self):
+        """Use the existing rigorous preflight without performing any file writes."""
+        selected=self.downloads_tree.selection()
+        game=self.current()
+        if len(selected)!=1 or not game:
+            messagebox.showinfo('Choose game and file',
+                                'Choose a game at the top and one downloaded file.',
+                                parent=self)
+            return
+        if getattr(self,'_downloads_review_busy',False):
+            return
+        try:receipt=dict(self.provider_stage_rows[int(selected[0])])
+        except (IndexError,KeyError,ValueError,TypeError):
+            self.downloads_info.set('Download list changed. Refresh and select it again.')
+            return
+        # Staged receipts do not prove that a file is safe. The preflight
+        # validates its SHA-256, game binding, ZIP format and dependencies.
+        game_root=str(Path(game['root']).resolve())
+        token=getattr(self,'_downloads_review_ticket',0)+1
+        self._downloads_review_ticket=token
+        identity=self._download_receipt_identity(receipt)
+        self._downloads_last_selection=(selected[0],identity)
+        self._downloads_review_busy=True
+        self._downloads_approved=None
+        self.downloads_install_button.configure(state='disabled')
+        self.downloads_info.set('Checking this file and its dependencies…')
+        def check():
+            try:result=provider_install_preflight(game,receipt)
+            except Exception:
+                result={'status':'Blocked','detail':'Could not inspect this download safely.'}
+            # Workers never call Tk directly; the UI thread polls the queue.
+            self._downloads_review_events.put((token,game_root,identity,result))
+        threading.Thread(target=check,daemon=True).start()
+        self.after(50,self._downloads_poll_review)
+
+    def _downloads_poll_review(self):
+        if not self.winfo_exists():return
+        try:token,root,identity,result=self._downloads_review_events.get_nowait()
+        except queue.Empty:
+            if getattr(self,'_downloads_review_busy',False):
+                self.after(50,self._downloads_poll_review)
+            return
+        self._downloads_review_finished(token,root,identity,result)
+
+    def _downloads_review_finished(self,token,game_root,identity,result):
+        self._downloads_review_busy=False
+        if not self.winfo_exists() or token!=self._downloads_review_ticket:return
+        current=self.current()
+        selected=self.downloads_tree.selection()
+        if not current or str(Path(current['root']).resolve())!=game_root or len(selected)!=1:
+            self.downloads_info.set('Game or selection changed. Check the download again.')
+            return
+        try:receipt=self.provider_stage_rows[int(selected[0])]
+        except (ValueError,TypeError,IndexError):return
+        if self._download_receipt_identity(receipt)!=identity:
+            self.downloads_info.set('Download changed. Check it again.')
+            return
+        status=result.get('status','Blocked')
+        description=str(result.get('detail') or '')[:450]
+        if status in ('Install new','Update existing'):
+            self._downloads_approved=(game_root,identity)
+            self.downloads_install_button.configure(state='normal')
+            action='New mod can be installed' if status=='Install new' else 'Existing mod can be updated (backup retained)'
+            self.downloads_info.set(action+'. '+description+
+                                    ' Review & install requires a separate confirmation.')
+        else:
+            self._downloads_approved=None
+            self.downloads_install_button.configure(state='disabled')
+            self.downloads_info.set('Cannot install from this screen: '+description+
+                                    ' Use More download options for supported game-specific installers.')
+
+    def downloads_install_selected(self):
+        """Handoff to the EXISTING rechecking, confirm-before-write installer."""
+        if getattr(self,'_downloads_review_busy',False):return
+        approved=getattr(self,'_downloads_approved',None)
+        game=self.current()
+        selected=self.downloads_tree.selection()
+        if not approved or not game or len(selected)!=1:
+            messagebox.showwarning('Check first',
+                                   'Select the downloaded file and run Check selected file first.',
+                                   parent=self)
+            return
+        root=str(Path(game['root']).resolve())
+        try:
+            self.provider_stage_refresh()
+            receipt=self.provider_stage_rows[int(selected[0])]
+            valid=(root, self._download_receipt_identity(receipt))==approved
+        except (ValueError,TypeError,IndexError,KeyError,OSError):
+            valid=False
+        if not valid:
+            self._downloads_approved=None
+            self.downloads_install_button.configure(state='disabled')
+            messagebox.showwarning('Download changed',
+                                   'The selected game or download changed. Check it again.',
+                                   parent=self)
+            return
+        # Selection is mapped by a fresh journal read. The existing installer
+        # independently re-verifies everything and requests explicit approval.
+        self.provider_stage_tree.selection_set(selected[0])
+        self._downloads_approved=None
+        self.downloads_install_button.configure(state='disabled')
+        self.provider_stage_install()
+
     def provider_stage_refresh(self):
         if not hasattr(self,'provider_stage_tree'):return
         self.provider_stage_rows=provider_staging.read_staged(PROVIDER_STAGE_FILE)
@@ -6294,6 +6462,14 @@ class App(tk.Tk):
             self.provider_stage_tree.insert('','end',iid=str(index),values=(entry.get('provider',''),entry.get('filename',''),
                      entry.get('version',''),Path(entry.get('game_root','')).name if entry.get('game_root') else 'Unassigned',str(dep_count)+' declared'))
         self.provider_stage_info.set(f'{len(self.provider_stage_rows)} staged files. Select a matching installed game and choose Review & install. ZIPs require verified package identities; no automatic installs.')
+        if hasattr(self,'downloads_tree'):
+            self.downloads_tree.delete(*self.downloads_tree.get_children())
+            self.downloads_selection_changed()
+            for index,entry in enumerate(self.provider_stage_rows):
+                self.downloads_tree.insert('','end',iid=str(index),values=(
+                    entry.get('provider',''),entry.get('filename',''),
+                    entry.get('version','') or 'Unknown',
+                    Path(entry['game_root']).name if entry.get('game_root') else 'Not assigned'))
         if hasattr(self,'downloads_provider_summary'):
             count=len(self.provider_stage_rows)
             self.downloads_provider_summary.set(
