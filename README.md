@@ -29,11 +29,11 @@ On Arch/CachyOS, Tkinter is usually supplied by the system Python package. Optio
 
 **Linux binaries:** The public development pre-release has a standard AppImage built and smoke-tested by GitHub Actions. The latest unreleased `main` features are available from source until a new AppImage is built and verified. See the [AppImage workflow](.github/workflows/appimage.yml).
 
-## Run All Tests — one simple button (v0.56 development)
+## Run All Tests — API key only (v0.56 development)
 
-Launch the source app using `python3 unimod.py`. Open **Discover → Run All Tests…** (also linked from **Help me test mod.io…**). One window runs the existing offline download/install/update/rollback safety test automatically. When your game is selected, enter your mod.io **Game ID**, **API-path User ID**, and **private API key** once in the masked form; you can optionally supply a Mod ID from the provider. After you approve a temporary data transfer, UniMod verifies the game's official name, checks modfile metadata and verifies **one** eligible public ZIP up to 64 MiB. With no Mod ID, it can automatically choose one public file from the verified game's catalogue **for the temporary test only**.
+Open **Discover → Run All Tests…** after selecting an installed supported SMAPI/BepInEx game. **Paste only your private mod.io API key**; there are no Game ID, User ID or Mod ID fields. UniMod automatically runs the disposable offline installation/update/rollback simulation, looks up the selected game's **exact** public mod.io name and ID (never guesses from a partial match), and when you approve the temporary transfer, finds a small public ZIP and verifies its checksum. The test ZIP is deleted. It does not stage or install anything, and a redacted report can be copied for bug reports.
 
-**Nothing is installed.** The ZIP is automatically deleted, no private credentials appear in the copyable result, and interrupted/invalid settings never show a false remote success. A real update still requires separate reviewed staging and explicit install approval. If credentials are missing, offline checks still run and the result tells you what's needed. Development `main` contains this button; the current published AppImage does not.
+**Important limitation:** mod.io's current API documentation recommends a unique user-specific API path that cannot be derived from an API key alone. UniMod uses the documented public key-only GET route if available, or reuses an already verified in-memory API path. Some personal keys may not support the public route; UniMod reports that limitation rather than inventing a user ID or declaring success. For those keys, the existing advanced **Discover → Verify mod.io game ID** connection remains available. Private keys are never included in reports or saved by the AIO tester.
 
 ## New tester? Start here (v0.56 development)
 
