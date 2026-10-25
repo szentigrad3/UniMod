@@ -3867,6 +3867,9 @@ class App(tk.Tk):
         for label,_ in self.primary_workspaces:self.nav_list.insert('end',label)
         self.configure_tool_menu()
         self.fill_games();self.auto_detect(silent=True)
+        # With an empty library, autodetection does not call refresh(). Make
+        # sure first-run guidance still appears immediately on startup.
+        self.update_dashboard()
         self.tabs.select(dashboard)
         self.sync_workspace()
         self.after(150,self.scan_global_library)
