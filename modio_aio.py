@@ -14,7 +14,7 @@ import modio_selftest
 import modio_keyonly
 import provider_catalogues as catalogue
 
-RESULTS = ('Passed', 'Failed', 'Not tested')
+RESULTS = ('Passed', 'Failed', 'Not tested', 'Not available')
 REQUIRED = ('installed', 'updated', 'backups', 'tamper_refused',
             'wrong_game_refused', 'bad_download_refused',
             'failed_update_restored', 'secrets_not_persisted')
@@ -29,6 +29,68 @@ def _emit(callback, name):
         callback(name)
 
 
+
+def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
+                             progress=None, temp_parent=None):
+    """Independently test the mod.io provider, never the installed game.
+
+    Use only official IDs from public GET /games. All fetched ZIP bytes stay
+    temporary, uninstalled and unassociated with a UniMod game profile.
+    """
+    report['scope'] = 'Provider-only (different game)'
+    try:
+        game_ids=modio_keyonly.public_test_game_ids(api_key,fetch=fetch)
+    except Exception:
+        report['reason']='provider_sample_unavailable'
+        return report
+    for public_gid in game_ids[:4]:
+        try:
+            base=modio_files._base(None,api_key)
+            url=f'{base}/games/{public_gid}/mods?'+urlencode({
+                'api_key':api_key.strip(),'_limit':5})
+            page=catalogue.fetch_json(url,fetch=fetch)
+            if not isinstance(page,dict) or not isinstance(page.get('data'),list):
+                continue
+        except Exception:
+            continue
+        for item in page['data'][:3]:
+            proposed=str(item.get('id') or '') if isinstance(item,dict) else ''
+            if (not re.fullmatch(r'[1-9][0-9]{0,11}',proposed)
+                    or (item.get('game_id') is not None
+                        and str(item['game_id'])!=public_gid)):
+                continue
+            try:
+                rows=modio_files.list_modfiles(
+                    public_gid+'/'+proposed,user_id=None,api_key=api_key,fetch=fetch)
+                eligible=[r for r in rows if type(r.get('size')) is int
+                          and 0<r['size']<=modio_live_probe.MAX_PROBE_BYTES]
+                if not eligible:
+                    continue
+                candidate=min(eligible,key=lambda r:(r['size'],-int(r['version_id'])))
+                modio_files.refresh_selected(candidate,user_id=None,api_key=api_key,fetch=fetch)
+            except Exception:
+                continue
+            report['selection']='Independent public test mod'
+            report['metadata']='Passed'
+            _emit(progress,'download')
+            try:
+                downloaded=modio_live_probe.probe_download(
+                    candidate,user_id=None,api_key=api_key,fetch=fetch,
+                    opener=opener,temp_parent=temp_parent)
+                if (downloaded.get('temporary') is not True or
+                        downloaded.get('installed') is not False):
+                    raise ValueError('Unexpected download result')
+                report['download']='Passed'
+                report['verified_bytes']=int(downloaded.get('bytes_verified',0))
+                report['reason']='provider_only_complete'
+            except Exception:
+                report['download']='Failed'
+                report['reason']='provider_only_download_failed'
+            return report
+    report['reason']='provider_sample_unavailable'
+    return report
+
+
 def run_aio(game, *, game_id='', user_id='', api_key='', mod_id='',
             allow_transfer=False, fetch=None, opener=None,
             offline_run=None, progress=None, temp_parent=None):
@@ -37,8 +99,9 @@ def run_aio(game, *, game_id='', user_id='', api_key='', mod_id='',
     Calls are sequential. Any error is reduced to a safe stage-specific code.
     No exception body or remote metadata is copied to the report.
     """
-    report = {'offline': 'Not tested', 'game': 'Not tested',
-              'metadata': 'Not tested', 'download': 'Not tested',
+    report = {'offline': 'Not tested', 'catalogue': 'Not tested',
+              'game': 'Not tested', 'metadata': 'Not tested',
+              'download': 'Not tested', 'scope': 'Not selected',
               'reason': 'none', 'verified_bytes': 0, 'selection': 'Not selected'}
     _emit(progress, 'offline')
     try:
@@ -65,6 +128,7 @@ def run_aio(game, *, game_id='', user_id='', api_key='', mod_id='',
     try:
         if legacy:
             record = catalogue.modio_game(game_id, api_key, user_id=user_id, fetch=fetch)
+            report['catalogue']='Passed'
             if _normal(record.get('name')) != _normal(game['name']):
                 report['game'] = 'Failed'
                 report['reason'] = 'wrong_game'
@@ -74,10 +138,26 @@ def run_aio(game, *, game_id='', user_id='', api_key='', mod_id='',
             # public game name; never guess a game from the API key.
             game_id = modio_keyonly.resolve_game(game, api_key, fetch=fetch)
             user_id = None  # Public key-only GET route, not /me.
+            report['catalogue']='Passed'
         report['game'] = 'Passed'
+        report['scope']='Selected game'
     except modio_keyonly.ResolutionError as exc:
+        code=str(exc)
+        if code in ('game_not_found','ambiguous_game'):
+            # The public API was reachable. The installed game is not
+            # verifiably on mod.io, which does not invalidate API access.
+            report['catalogue']='Passed'
+            report['game']='Not available'
+            report['metadata']='Not available'
+            report['download']='Not available'
+            report['reason']=code
+            if allow_transfer and code=='game_not_found':
+                return _probe_other_public_game(
+                    report,api_key,fetch=fetch,opener=opener,
+                    progress=progress,temp_parent=temp_parent)
+            return report
         report['game'] = 'Failed'
-        report['reason'] = str(exc) if str(exc) in HELP else 'game_api'
+        report['reason'] = code if code in HELP else 'game_api'
         return report
     except Exception:
         report['game'] = 'Failed'
@@ -163,7 +243,7 @@ HELP = {
     'choose_game': 'Choose a supported game in UniMod, then run the test again.',
     'connect': 'Enter your private mod.io API key. Game selection is taken from UniMod.',
     'key_path_required': 'This key needs its unique mod.io API path. Key-only access was not accepted; no account ID was guessed.',
-    'game_not_found': 'The selected game could not be matched exactly in mod.io’s public catalogue.',
+    'game_not_found': 'Selected game is not listed on mod.io. Public catalogue access worked; your API key is not proven invalid.',
     'ambiguous_game': 'Multiple or incomplete game matches: choose an unambiguous supported game before testing.',
     'wrong_game': 'The mod.io game does not match your selected installed game.',
     'game_api': 'Game verification failed. Check your connection and credentials.',
@@ -173,7 +253,10 @@ HELP = {
     'zip_too_large': 'No eligible ZIP is under the 64 MiB safety limit.',
     'transfer_not_approved': 'Temporary downloading was not approved; nothing was downloaded.',
     'download_failed': 'Temporary download failed verification. No game files changed.',
-    'complete': 'Checks finished. The temporary ZIP was deleted; no game files changed.',
+    'complete': 'Selected-game checks finished. The temporary ZIP was deleted; no game files changed.',
+    'provider_only_complete': 'Public mod.io ZIP verified using a different supported game. Your selected game is NOT supported by this result.',
+    'provider_only_download_failed': 'Independent public mod.io ZIP download failed. Your installed game was not touched.',
+    'provider_sample_unavailable': 'Selected game is not on mod.io, and no suitable independent public test ZIP was verified.',
 }
 
 
@@ -187,11 +270,14 @@ def public_report(result):
     reason = reason if reason in HELP else 'none'
     return ('UniMod — Run All Tests (v0.56 development)\n'
             'Offline install/update/rollback: ' + value('offline') + '\n'
+            'Public mod.io catalogue access: ' + value('catalogue') + '\n'
             'Official game verification: ' + value('game') + '\n'
             'Mod release metadata: ' + value('metadata') + '\n'
             'Temporary ZIP download: ' + value('download') + '\n'
             'Mod selection: ' + (state.get('selection') if state.get('selection') in
-                ('Selected mod', 'Automatic public test mod') else 'Not selected') + '\n'
+                ('Selected mod', 'Automatic public test mod', 'Independent public test mod') else 'Not selected') + '\n'
+            'Test scope: ' + (state.get('scope') if state.get('scope') in
+                ('Selected game', 'Provider-only (different game)') else 'Not selected') + '\n'
             'Result: ' + HELP[reason] + '\n'
             'Real-game installation: Not attempted\n'
             'Private key, account IDs, mod IDs, paths and download URLs: excluded.\n')
