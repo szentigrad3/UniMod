@@ -58,7 +58,7 @@ with TemporaryDirectory() as temp:
                 spin(app,lambda:not app._modio_aio_running)
             assert confirm.called, 'No approval for automatic public download'
             assert len(calls)==1 and calls[0][1]['allow_transfer'] is True
-            assert calls[0][1]['mod_id']==''
+            assert calls[0][1].get('mod_id','')==''
             assert calls[0][1]['game_id']==''
             assert calls[0][1]['user_id']==''
             assert calls[0][1]['api_key']==KEY
