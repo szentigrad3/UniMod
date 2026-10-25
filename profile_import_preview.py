@@ -17,17 +17,16 @@ def _mod_counts(mods_path):
         return 0, 0, 'Mods directory unavailable or unsafe'
     enabled = disabled = 0
     try:
-        with mods.iterdir() as entries:
-            for index, item in enumerate(entries):
-                if index >= MAX_MOD_ENTRIES:
-                    return enabled, disabled, 'Too many entries to inspect completely'
-                if item.is_symlink() or not item.is_file():
-                    continue
-                low = item.name.casefold()
-                if low.endswith('.jar'):
-                    enabled += 1
-                elif low.endswith('.jar.disabled'):
-                    disabled += 1
+        for index, item in enumerate(mods.iterdir()):
+            if index >= MAX_MOD_ENTRIES:
+                return enabled, disabled, 'Too many entries to inspect completely'
+            if item.is_symlink() or not item.is_file():
+                continue
+            low = item.name.casefold()
+            if low.endswith('.jar'):
+                enabled += 1
+            elif low.endswith('.jar.disabled'):
+                disabled += 1
     except OSError:
         return enabled, disabled, 'Cannot read some mods'
     return enabled, disabled, None
