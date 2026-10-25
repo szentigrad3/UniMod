@@ -3864,11 +3864,9 @@ class App(tk.Tk):
         # One simple review-first updates page. Never issues API requests on load.
         updates=ttk.Frame(self.tabs,padding=(16,12));self.tabs.add(updates,text='  Updates Available  ')
         header=ttk.Frame(updates);header.pack(fill='x',pady=(0,8))
-        ttk.Label(header,text='Updates for your installed mods',style='Title.TLabel').pack(side='left')
-        ttk.Button(header,text='Check connected sources',command=self.unified_check,style='Accent.TButton').pack(side='right',padx=(8,0))
-        ttk.Button(header,text='Refresh inventory',command=self.refresh).pack(side='right')
-        self.unified_source_button=ttk.Button(header,text='Resolve mod sources…',command=self.unified_identify_sources)
-        self.unified_source_button.pack(side='right',padx=(0,8))
+        ttk.Label(header,text='My Mod Updates',style='Title.TLabel').pack(side='left')
+        ttk.Button(header,text='Check for updates',command=self.unified_check,
+                   style='Accent.TButton').pack(side='right',padx=(8,0))
         self.unified_info=tk.StringVar(value='Choose a game, then check for updates. Nothing downloads or installs without approval.')
         ttk.Label(updates,textvariable=self.unified_info,style='Subtle.TLabel',wraplength=1100).pack(anchor='w',pady=(0,9))
         ubar=ttk.Frame(updates);ubar.pack(fill='x',pady=(0,8))
@@ -3880,7 +3878,6 @@ class App(tk.Tk):
         ttk.Combobox(ubar,textvariable=self.unified_filter,state='readonly',width=20,
                      values=('All','Updates available','Not checked','Up to date','Needs attention')).pack(side='left',padx=(0,8))
         self.unified_filter.trace_add('write',lambda *_:self.unified_render())
-        ttk.Button(ubar,text='Nexus account / developer options',command=lambda:self.show_page('Nexus Updates')).pack(side='right')
         area=ttk.Frame(updates);area.pack(fill='both',expand=True)
         self.unified_tree=ttk.Treeview(area,columns=('name','installed','latest','source','status','parts','download'),show='headings',selectmode='extended')
         for field,label,width in (('name','Mod / family',320),('installed','Installed',100),('latest','Latest checked',120),('source','Source',100),('status','Result',165),('parts','Parts',70),('download','Downloaded ZIP',185)):
@@ -3890,16 +3887,37 @@ class App(tk.Tk):
         scrollbar=ttk.Scrollbar(area,command=self.unified_tree.yview);scrollbar.pack(side='right',fill='y')
         self.unified_tree.configure(yscrollcommand=scrollbar.set)
         self.unified_tree.bind('<Double-1>',lambda *_:self.unified_open_page())
-        actions=ttk.Frame(updates);actions.pack(fill='x',pady=(10,0))
-        ttk.Button(actions,text='Open selected mod page',command=self.unified_open_page).pack(side='left',padx=(0,7))
-        ttk.Button(actions,text='Choose Nexus file…',command=self.unified_choose_file).pack(side='left',padx=(0,7))
-        ttk.Button(actions,text='Find downloaded updates',command=self.unified_scan_downloads,style='Accent.TButton').pack(side='left',padx=(0,7))
-        ttk.Button(actions,text='Review & Install selected…',command=self.unified_review_install).pack(side='left',padx=(0,7))
-        ttk.Button(actions,text='Select ready ZIPs',command=self.unified_select_ready).pack(side='left',padx=(0,7))
-        ttk.Button(actions,text='Review & Install batch…',command=self.unified_review_batch,style='Accent.TButton').pack(side='left',padx=(0,7))
-        ttk.Button(actions,text='Open full Update Inbox',command=lambda:self.show_page('Update Inbox')).pack(side='left',padx=(0,7))
-        ttk.Button(actions,text='Resolve missing sources',command=lambda:self.show_page('Source Matching')).pack(side='right')
-        ttk.Label(updates,text='Updates are based on confirmed version responses only. Downloads go into the review queue; no automatic installations.',style='Subtle.TLabel').pack(anchor='w',pady=(9,0))
+        self.updates_actions=ttk.Frame(updates)
+        self.updates_actions.pack(fill='x',pady=(10,0))
+        ttk.Button(self.updates_actions,text='Find downloaded updates',
+                   command=self.unified_scan_downloads,style='Accent.TButton').pack(side='left',padx=(0,8))
+        ttk.Button(self.updates_actions,text='Review selected update…',
+                   command=self.unified_review_install).pack(side='left',padx=(0,8))
+        ttk.Button(self.updates_actions,text='Restore a backup…',
+                   command=self.restore_from_backup).pack(side='left',padx=(0,8))
+        self.update_tools_button=ttk.Button(
+            self.updates_actions,text='More update options  ▸',
+            command=self.toggle_update_tools)
+        self.update_tools_button.pack(side='right')
+        self.updates_advanced=ttk.Frame(updates)
+        more_main=ttk.Frame(self.updates_advanced);more_main.pack(fill='x',pady=(0,6))
+        ttk.Button(more_main,text='Open mod page',command=self.unified_open_page).pack(side='left',padx=(0,8))
+        ttk.Button(more_main,text='Choose Nexus file…',command=self.unified_choose_file).pack(side='left',padx=(0,8))
+        ttk.Button(more_main,text='Select ready ZIPs',command=self.unified_select_ready).pack(side='left',padx=(0,8))
+        ttk.Button(more_main,text='Review update batch…',command=self.unified_review_batch).pack(side='left')
+        more_other=ttk.Frame(self.updates_advanced);more_other.pack(fill='x')
+        ttk.Button(more_other,text='Full update inbox',
+                   command=lambda:self.show_page('Update Inbox')).pack(side='left',padx=(0,8))
+        ttk.Button(more_other,text='Refresh installed mods',command=self.refresh).pack(side='left',padx=(0,8))
+        ttk.Button(more_other,text='Match missing sources',
+                   command=lambda:self.show_page('Source Matching')).pack(side='left',padx=(0,8))
+        ttk.Button(more_other,text='Nexus account options',
+                   command=lambda:self.show_page('Nexus Updates')).pack(side='left',padx=(0,8))
+        self.unified_source_button=ttk.Button(more_other,text='Resolve mod sources…',
+                                               command=self.unified_identify_sources)
+        self.unified_source_button.pack(side='left')
+        ttk.Label(updates,text='Version checks do not install anything. Updates always require review and confirmation.',
+                  style='Subtle.TLabel').pack(anchor='w',pady=(9,0))
         # Update inbox: browser-downloaded archives matched against existing SMAPI IDs.
         inbox=ttk.Frame(self.tabs,padding=12);self.tabs.add(inbox,text='  Update Inbox  ');self.inbox_tab=inbox
         ttk.Label(inbox,text='Nexus download queue',style='Section.TLabel').pack(anchor='w',pady=(0,5))
@@ -4612,6 +4630,15 @@ class App(tk.Tk):
             self._unified_events.put(('batch_installed',root,(result,error)))
         threading.Thread(target=worker,daemon=True).start()
         self.after(70,self._poll_unified_events)
+
+    def toggle_update_tools(self):
+        """Show optional batch, provider and technical controls on demand."""
+        if self.updates_advanced.winfo_manager():
+            self.updates_advanced.pack_forget()
+            self.update_tools_button.configure(text='More update options  ▸')
+        else:
+            self.updates_advanced.pack(fill='x',after=self.updates_actions,pady=(8,0))
+            self.update_tools_button.configure(text='Fewer options  ▴')
 
     def unified_review_install(self):
         game=self.current();row=self.unified_picked()
