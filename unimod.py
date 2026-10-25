@@ -3629,6 +3629,7 @@ class App(tk.Tk):
         self.provider_combo=ttk.Combobox(discovery,textvariable=self.provider_choice,
             state='readonly',width=16,values=provider_catalogues.PROVIDERS)
         self.provider_combo.pack(side='left',padx=(0,9))
+        self.provider_combo.bind('<<ComboboxSelected>>',lambda *_:self.provider_changed())
         self.provider_query=tk.StringVar(value='')
         self.provider_search_box=ttk.Entry(discovery,textvariable=self.provider_query,width=36)
         self.provider_search_box.pack(side='left',fill='x',expand=True,padx=(0,9))
@@ -5395,6 +5396,18 @@ class App(tk.Tk):
             status.set(f'{len(rows)} file records found (first page only). Metadata is not installation approval.')
         threading.Thread(target=worker,daemon=True).start();dlg.after(100,poll)
 
+    def provider_changed(self):
+        """Never show old results as belonging to a newly selected provider."""
+        provider=self.provider_choice.get()
+        self.provider_results=[]
+        self.provider_tree.delete(*self.provider_tree.get_children())
+        self.update_provider_next_step()
+        if provider in ('mod.io','CurseForge','Thunderstore'):
+            self.toggle_provider_setup(open=True)
+            self.provider_info.set('This provider needs extra setup. Complete Advanced provider setup before searching.')
+        else:
+            self.provider_info.set('Search official catalogue listings; results are not proof of game compatibility.')
+
     def toggle_provider_setup(self, open=None):
         """Show advanced provider fields on demand without clearing session values."""
         visible=bool(self.provider_advanced.winfo_manager())
@@ -5468,6 +5481,9 @@ class App(tk.Tk):
                 self.toggle_provider_setup(open=True)
             return
         self.provider_loading=True
+        active_game=self.current()
+        active_root=str(Path(active_game['root']).resolve()) if active_game else None
+        self._provider_request_guard=(provider,active_root)
         self.after(80,self._poll_provider_events)
         self.provider_info.set('Searching '+provider+'… (no installation or source assignment)')
         def worker():
@@ -5486,6 +5502,13 @@ class App(tk.Tk):
         try: kind, value, provider=self._provider_events.get_nowait()
         except queue.Empty:
             if self.provider_loading:self.after(80,self._poll_provider_events)
+            return
+        current=self.current()
+        current_root=str(Path(current['root']).resolve()) if current else None
+        if (getattr(self,'_provider_request_guard',None)!=(provider,current_root)
+            or self.provider_choice.get()!=provider):
+            self.provider_loading=False
+            self.provider_info.set('Game or website changed. Search again to see results for the current selection.')
             return
         if kind=='provider_results':
             self.provider_show_results(value,provider)
