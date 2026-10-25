@@ -3709,36 +3709,52 @@ class App(tk.Tk):
         # Full-width mod library, two slim filter rows and optional inspector.
         installed.configure(padding=(12,8))
         pagebar=ttk.Frame(installed);pagebar.pack(fill='x',pady=(1,7))
-        ttk.Label(pagebar,text='Installed mods',style='Section.TLabel').pack(side='left')
+        ttk.Label(pagebar,text='My Mods',style='Title.TLabel').pack(side='left')
         self.count_label=ttk.Label(pagebar,text='0 mods',style='Subtle.TLabel')
         self.count_label.pack(side='right',padx=8)
+        self.mod_advanced_visible=tk.BooleanVar(value=False)
+        self.mod_advanced_button=ttk.Button(pagebar,text='Advanced view  ▸',
+                                             command=self.toggle_mod_advanced,
+                                             style='Top.TButton')
+        self.mod_advanced_button.pack(side='right',padx=8)
         self.details_visible=tk.BooleanVar(value=False)
-        ttk.Button(pagebar,text='ⓘ Details',command=self.toggle_details,style='Top.TButton').pack(side='right',padx=8)
-        ttk.Button(pagebar,text='Open folder',command=self.open_dir,style='Top.TButton').pack(side='right',padx=8)
-        ttk.Button(pagebar,text='Find mod sources',command=self.find_sources_easy,style='Accent.TButton').pack(side='right',padx=8)
+        ttk.Button(pagebar,text='ⓘ Mod details',command=self.toggle_details,
+                   style='Top.TButton').pack(side='right',padx=8)
+        ttk.Button(pagebar,text='Check My Mods',command=self.show_game_health,
+                   style='Accent.TButton').pack(side='right',padx=8)
+        ttk.Label(installed,text='Select a mod to see details. Use the On / Off column to enable or disable it.',
+                  style='Subtle.TLabel',wraplength=950).pack(anchor='w',pady=(0,8))
         filterbar=ttk.Frame(installed);filterbar.pack(fill='x',pady=(0,7))
+        ttk.Label(filterbar,text='Search mods:').pack(side='left',padx=(0,7))
         self.query=tk.StringVar();self.query.trace_add('write',lambda *_:self.fill_mods())
         self.filter_entry=ttk.Entry(filterbar,textvariable=self.query,font=('DejaVu Sans',10))
-        self.filter_entry.pack(side='left',fill='x',expand=True,padx=(0,8),ipady=2)
-        self.filter_entry.insert(0,'')
+        self.filter_entry.pack(side='left',fill='x',expand=True,padx=(0,10),ipady=2)
+        ttk.Label(filterbar,text='Show:').pack(side='left',padx=(0,7))
         self.mod_visibility=tk.StringVar(value='All')
         visibility=ttk.Combobox(filterbar,state='readonly',textvariable=self.mod_visibility,
                     values=('All','Enabled','Disabled','Known source','Unknown source'),width=15)
-        visibility.pack(side='left',padx=(0,8))
+        visibility.pack(side='left')
         visibility.bind('<<ComboboxSelected>>',lambda _:self.fill_mods())
+        self.mod_advanced_tools=ttk.Frame(installed)
         self.group_components=tk.BooleanVar(value=True)
-        ttk.Checkbutton(filterbar,text='Group families',variable=self.group_components,command=self.fill_mods).pack(side='left',padx=(2,9))
+        ttk.Checkbutton(self.mod_advanced_tools,text='Group mod families',
+                        variable=self.group_components,command=self.fill_mods).pack(side='left',padx=(0,12))
+        ttk.Label(self.mod_advanced_tools,text='Sort by:').pack(side='left',padx=(0,6))
         self.mod_sort_value=tk.StringVar(value='Name')
-        mod_sort=ttk.Combobox(filterbar,state='readonly',textvariable=self.mod_sort_value,
+        mod_sort=ttk.Combobox(self.mod_advanced_tools,state='readonly',textvariable=self.mod_sort_value,
                               values=('Name','Author','Version','Status','Source'),width=11)
-        mod_sort.pack(side='left')
+        mod_sort.pack(side='left',padx=(0,12))
         mod_sort.bind('<<ComboboxSelected>>',lambda _:self.sort_installed_table(self.mod_sort_value.get().lower()))
+        ttk.Button(self.mod_advanced_tools,text='Find mod sources',
+                   command=self.find_sources_easy).pack(side='left',padx=(0,8))
+        ttk.Button(self.mod_advanced_tools,text='Open game mods folder',
+                   command=self.open_dir).pack(side='left')
         self.mod_body=ttk.Panedwindow(installed,orient='horizontal');self.mod_body.pack(fill='both',expand=True)
         treearea=ttk.Frame(self.mod_body,style='Panel.TFrame',padding=0)
         self.mod_body.add(treearea,weight=5)
         table_area=ttk.Frame(treearea,style='Panel.TFrame');table_area.pack(fill='both',expand=True)
         columns=('name','status','version','source','author','update','id','path')
-        self.tree=ttk.Treeview(table_area,columns=columns,displaycolumns=('author','source','version','status'),
+        self.tree=ttk.Treeview(table_area,columns=columns,displaycolumns=('version','status'),
                                show='tree headings',selectmode='browse',style='Mods.Treeview')
         self.tree.heading('#0',text='MOD NAME',command=lambda:self.sort_installed_table('name'))
         self.tree.column('#0',width=475,minwidth=215,stretch=True)
@@ -3746,6 +3762,8 @@ class App(tk.Tk):
                             ('status','ENABLED',105),('update','Updates',115),('id','ID',170),('path','Path',240)]:
             self.tree.heading(col,text=title,command=lambda key=col:self.sort_installed_table(key))
             self.tree.column(col,width=w,minwidth=60,stretch=(col=='source'),anchor='w' if col!='status' else 'center')
+        self.mod_horizontal_scroll=ttk.Scrollbar(table_area,orient='horizontal',command=self.tree.xview)
+        self.tree.configure(xscrollcommand=self.mod_horizontal_scroll.set)
         self.tree.pack(side='left',fill='both',expand=True)
         scroll=ttk.Scrollbar(table_area,command=self.tree.yview)
         scroll.pack(side='right',fill='y');self.tree.configure(yscrollcommand=scroll.set)
@@ -4308,11 +4326,29 @@ class App(tk.Tk):
         if not self.details_visible.get():self.toggle_details()
         return 'break'
 
+    def toggle_mod_advanced(self):
+        """Simple 3-column mod table by default; reveal optional metadata on demand."""
+        expanded=not self.mod_advanced_visible.get()
+        self.mod_advanced_visible.set(expanded)
+        if expanded:
+            self.mod_advanced_tools.pack(fill='x',after=self.filter_entry.master,pady=(0,8))
+            self.tree.configure(displaycolumns=('author','source','version','status','update','id'))
+            self.mod_horizontal_scroll.pack(side='bottom',fill='x',before=self.tree)
+            self.mod_advanced_button.configure(text='Simple view  ▴')
+        else:
+            self.mod_advanced_tools.pack_forget()
+            self.tree.configure(displaycolumns=('version','status'))
+            self.mod_horizontal_scroll.pack_forget()
+            self.mod_advanced_button.configure(text='Advanced view  ▸')
+
     def installed_status_click(self,event):
-        # Column #4 is the state; a single deliberate click toggles the
+        # The On/Off column moves between simple and advanced views.
+        # Resolve its position from the actual displayed columns, not a fixed index.
         # selected component, not its visual family and not unrelated folders.
         if self.tree.identify_region(event.x,event.y)!='cell':return
-        if self.tree.identify_column(event.x)!='#4':return
+        visible_columns=self.tk.splitlist(self.tree.cget('displaycolumns'))
+        if 'status' not in visible_columns:return
+        if self.tree.identify_column(event.x)!=f"#{visible_columns.index('status')+1}":return
         iid=self.tree.identify_row(event.y)
         if not iid or iid in self.family_rows:return
         self.tree.selection_set(iid)
