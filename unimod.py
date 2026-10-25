@@ -23,6 +23,7 @@ import modio_managed
 import modio_diagnostics
 import modio_live_probe
 import modio_guide
+import modio_aio
 import provider_staging
 import minecraft_profiles
 import minecraft_dependencies
@@ -3571,7 +3572,8 @@ class App(tk.Tk):
         self.modio_user_id=tk.StringVar(value='')
         ttk.Entry(modio_row,textvariable=self.modio_user_id,width=16).pack(side='left',padx=(0,8))
         ttk.Button(modio_row,text='Verify mod.io game ID…',command=self.provider_verify_modio_game).pack(side='left',padx=(0,8))
-        ttk.Button(modio_row,text='Help me test mod.io…',command=self.provider_modio_test_guide,style='Accent.TButton').pack(side='left',padx=(0,8))
+        ttk.Button(modio_row,text='Help me test mod.io…',command=self.provider_modio_test_guide).pack(side='left',padx=(0,8))
+        ttk.Button(modio_row,text='Run All Tests…',command=self.provider_modio_aio,style='Accent.TButton').pack(side='left',padx=(0,8))
         ttk.Label(modio_row,text='Session key only; read-only catalogue and reviewed modfile downloads',style='Subtle.TLabel').pack(side='left')
         self.modio_verified=None
         self._modio_test_results={}  # Session-only and bound to the verified game/mod/key.
@@ -5386,6 +5388,166 @@ class App(tk.Tk):
         # URLs originate from safe provider-specific constructors/parsers.
         webbrowser.open(url)
 
+    def provider_modio_aio(self):
+        """One-page test runner: no terminal, no silent downloads/installations."""
+        if getattr(self,'_modio_aio_running',False):
+            messagebox.showinfo('UniMod tests','A test is already running.',parent=self)
+            return
+        dialog=tk.Toplevel(self)
+        dialog.title('UniMod — Run All Tests')
+        dialog.geometry('640x595')
+        dialog.minsize(580,545)
+        dialog.transient(self)
+        container=ttk.Frame(dialog,padding=(18,16))
+        container.pack(fill='both',expand=True)
+        ttk.Label(container,text='Run All Tests',style='Title.TLabel').pack(anchor='w')
+        ttk.Label(container,text='Runs the built-in offline safety test first. With a valid mod.io connection '
+           'and an optional mod ID, it also checks releases and can verify one temporary ZIP download. '
+           'It never installs anything or changes your games.',
+           wraplength=580).pack(anchor='w',pady=(4,10))
+        try:
+            selection=self.provider_tree.selection()
+            item=self.provider_results[int(selection[0])] if len(selection)==1 else None
+            prefill=item.get('identity','') if isinstance(item,dict) and item.get('provider')=='mod.io' else ''
+        except (IndexError,KeyError,TypeError,ValueError,tk.TclError):
+            prefill=''
+        default_gid=self.provider_scope.get().strip()
+        default_mid=''
+        if isinstance(prefill,str) and re.fullmatch(r'[1-9][0-9]{0,11}/[1-9][0-9]{0,11}',prefill):
+            default_gid,default_mid=prefill.split('/')
+        fields=ttk.Frame(container)
+        fields.pack(fill='x')
+        game_id=tk.StringVar(value=default_gid)
+        user_id=tk.StringVar(value=self.modio_user_id.get().strip())
+        secret=tk.StringVar(value=self.provider_key.get().strip())
+        mod_id=tk.StringVar(value=default_mid)
+        for row,(caption,var,masked) in enumerate((
+            ('mod.io Game ID',game_id,False),
+            ('mod.io API-path User ID',user_id,False),
+            ('Private API key (never saved)',secret,True),
+            ('Mod ID (optional; for ZIP test)',mod_id,False))):
+            ttk.Label(fields,text=caption).grid(row=row,column=0,sticky='w',pady=5,padx=(0,12))
+            entry=ttk.Entry(fields,textvariable=var,width=38,show='•' if masked else '')
+            entry.grid(row=row,column=1,sticky='ew',pady=5)
+        fields.columnconfigure(1,weight=1)
+        ttk.Label(container,text='The game and mod IDs come from mod.io. If you do not have them yet, '
+                  'run the offline check now and add them later. Your API key is used only during this session.',
+                  wraplength=580,style='Subtle.TLabel').pack(anchor='w',pady=(8,8))
+        transfer=tk.BooleanVar(value=True)
+        ttk.Checkbutton(container,
+            text='Test one public ZIP download (maximum 64 MiB, deleted after checking)',
+            variable=transfer).pack(anchor='w')
+        status=tk.StringVar(value='Ready. No files have been changed.')
+        ttk.Label(container,textvariable=status,wraplength=590,
+                  style='Section.TLabel').pack(anchor='w',pady=(12,5))
+        report=tk.StringVar(value=modio_aio.public_report({}))
+        ttk.Label(container,textvariable=report,wraplength=590,
+                  justify='left').pack(anchor='w',pady=(3,8))
+        buttons=ttk.Frame(container)
+        buttons.pack(fill='x',side='bottom',pady=(8,0))
+        def copy_result():
+            self.clipboard_clear()
+            self.clipboard_append(report.get())
+            status.set('Safe report copied. Paste it into a bug report.')
+        ttk.Button(buttons,text='Copy safe report',command=copy_result).pack(side='left')
+        def close():
+            if getattr(self,'_modio_aio_running',False):
+                status.set('Test in progress. The temporary ZIP will be deleted when it finishes.')
+                return
+            dialog.destroy()
+        ttk.Button(buttons,text='Close',command=close).pack(side='right')
+        dialog.protocol('WM_DELETE_WINDOW',close)
+        messages={
+            'offline':'Running offline install/update/rollback safety checks…',
+            'game':'Checking the official mod.io game name…',
+            'metadata':'Checking release-file metadata…',
+            'download':'Downloading and verifying one temporary ZIP…'
+        }
+        def start():
+            if self._modio_aio_running:return
+            approve=bool(transfer.get())
+            if approve:
+                approve=messagebox.askyesno('Approve temporary test download',
+                    'UniMod may transfer one public ZIP up to 64 MiB for the verified game. '
+                    'When no Mod ID is entered, it will pick a public test mod automatically. '
+                    'The ZIP will be verified and deleted, never installed. Continue?',
+                    parent=dialog)
+                if not approve:
+                    status.set('Download permission declined; offline and metadata checks can still run.')
+            self._modio_aio_running=True
+            start_btn.configure(state='disabled')
+            context=(game_id.get().strip(),user_id.get().strip(),secret.get().strip(),
+                     mod_id.get().strip())
+            try:
+                current_game=self.current()
+                root=str(Path(current_game['root']).resolve()) if current_game else ''
+                game=dict(current_game) if isinstance(current_game,dict) else None
+            except (OSError,ValueError,TypeError,KeyError):
+                root='';game=None
+            events=queue.Queue()
+            status.set('Starting safe tests…')
+            def progress(stage):
+                events.put(('progress',stage))
+            def worker():
+                try:
+                    result=modio_aio.run_aio(game,game_id=context[0],user_id=context[1],
+                            api_key=context[2],mod_id=context[3],
+                            allow_transfer=approve,progress=progress)
+                except Exception:
+                    result={'offline':'Failed','game':'Not tested','metadata':'Not tested',
+                            'download':'Not tested','reason':'none'}
+                events.put(('result',result))
+            def poll():
+                if not dialog.winfo_exists():
+                    return
+                try:
+                    kind,payload=events.get_nowait()
+                except queue.Empty:
+                    self.after(100,poll);return
+                if kind=='progress':
+                    status.set(messages.get(payload,'Running checks…'))
+                    self.after(90,poll)
+                    return
+                self._modio_aio_running=False
+                start_btn.configure(state='normal')
+                try:
+                    now=self.current()
+                    same_game=(bool(now) and str(Path(now['root']).resolve())==root
+                         and now.get('name')==game.get('name')) if game else not bool(now)
+                    same_fields=context==(game_id.get().strip(),user_id.get().strip(),
+                                         secret.get().strip(),mod_id.get().strip())
+                except (OSError,ValueError,TypeError,KeyError):
+                    same_game=False;same_fields=False
+                if not (same_game and same_fields):
+                    report.set(modio_aio.public_report({'offline':payload.get('offline'),
+                        'reason':'none'}))
+                    status.set('Game or test details changed. Live results discarded.')
+                    return
+                report.set(modio_aio.public_report(payload))
+                self._modio_offline_result=payload.get('offline','Failed')
+                if payload.get('game')=='Passed':
+                    digest=hashlib.sha256(context[2].encode()).digest()
+                    self.modio_verified=(context[0],context[1],digest,game['name'])
+                    self.provider_choice.set('mod.io')
+                    self.provider_scope.set(context[0])
+                    self.modio_user_id.set(context[1])
+                    self.provider_key.set(context[2])
+                    if context[3] and payload.get('metadata') in ('Passed','Failed'):
+                        self._modio_aio_selected={'provider':'mod.io',
+                                                  'identity':context[0]+'/'+context[3]}
+                        evidence=(root,context[0]+'/'+context[3],context[1],digest)
+                        for category,label in (('metadata','metadata'),('download','download')):
+                            if payload.get(label) in ('Passed','Failed'):
+                                self._modio_test_results[category]={
+                                    'context':evidence,'result':payload[label]}
+                status.set(modio_aio.HELP.get(payload.get('reason'),
+                                              'Tests finished. Copy your safe report.'))
+            threading.Thread(target=worker,daemon=True).start()
+            self.after(100,poll)
+        self._modio_aio_running=False
+        start_btn=ttk.Button(buttons,text='Run All Tests',command=start,style='Accent.TButton')
+        start_btn.pack(side='right',padx=8)
+
     def provider_modio_test_guide(self):
         """Plain-English, click-through help for mod.io testing and safe bug reports."""
         dialog=tk.Toplevel(self)
@@ -5508,6 +5670,8 @@ class App(tk.Tk):
             self.clipboard_append(modio_guide.safe_report(current_snapshot()))
             selected_info.set('Safe report copied. Paste it into your GitHub issue.')
         ttk.Button(buttons,text='Copy safe test report',command=copy_report).pack(side='left')
+        ttk.Button(buttons,text='Run All Tests…',command=lambda:go('Mod Websites',self.provider_modio_aio),
+                   style='Accent.TButton').pack(side='left',padx=(8,0))
         ttk.Button(buttons,text='Refresh steps',command=refresh).pack(side='left',padx=8)
         ttk.Button(buttons,text='Close',command=dialog.destroy).pack(side='right')
         ttk.Label(root,textvariable=selected_info,style='Subtle.TLabel').pack(anchor='w',pady=(7,0))

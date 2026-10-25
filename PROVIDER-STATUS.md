@@ -50,3 +50,7 @@ Click **Discover → Help me test mod.io…** for next-step instructions, ready/
 ### No-terminal offline safety check
 
 Click **Run built-in safety test** inside **Help me test mod.io…**. The GUI runs the existing offline mod.io lifecycle check in a background thread using only temporary fake game files. A plain pass/fail status appears in the guide and the copyable privacy-safe report. This does not contact mod.io or install real mods; live API/CDN and actual game behaviour still require separate validation.
+
+## v0.56 — Run All Tests AIO (development branch only until next release)
+
+**Discover → Run All Tests…** provides a single setup window with a masked session key. It always runs offline install/update/rollback tests, and—with a verified game/credential combination—checks API metadata and can automatically choose one small public mod.io ZIP for **opted-in temporary integrity verification** (hard 64 MiB limit). The test deletes the ZIP and never stages or installs it. A copyable pass/fail report strips API keys, game/mod/account IDs, signed URLs and local paths. The tester must still approve any **real** game installation in Provider Inbox. Auto-selection is restricted to official records for the selected game; it is not an install or compatibility recommendation.

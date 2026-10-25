@@ -29,6 +29,12 @@ On Arch/CachyOS, Tkinter is usually supplied by the system Python package. Optio
 
 **Linux binaries:** The public development pre-release has a standard AppImage built and smoke-tested by GitHub Actions. The latest unreleased `main` features are available from source until a new AppImage is built and verified. See the [AppImage workflow](.github/workflows/appimage.yml).
 
+## Run All Tests — one simple button (v0.56 development)
+
+Launch the source app using `python3 unimod.py`. Open **Discover → Run All Tests…** (also linked from **Help me test mod.io…**). One window runs the existing offline download/install/update/rollback safety test automatically. When your game is selected, enter your mod.io **Game ID**, **API-path User ID**, and **private API key** once in the masked form; you can optionally supply a Mod ID from the provider. After you approve a temporary data transfer, UniMod verifies the game's official name, checks modfile metadata and verifies **one** eligible public ZIP up to 64 MiB. With no Mod ID, it can automatically choose one public file from the verified game's catalogue **for the temporary test only**.
+
+**Nothing is installed.** The ZIP is automatically deleted, no private credentials appear in the copyable result, and interrupted/invalid settings never show a false remote success. A real update still requires separate reviewed staging and explicit install approval. If credentials are missing, offline checks still run and the result tells you what's needed. Development `main` contains this button; the current published AppImage does not.
+
 ## New tester? Start here (v0.56 development)
 
 From the current source directory, run `python3 unimod.py`, select **Discover**, and click **Help me test mod.io…**. The guide shows the next step and links directly to each relevant screen.
