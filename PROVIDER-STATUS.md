@@ -54,3 +54,7 @@ Click **Run built-in safety test** inside **Help me test mod.io…**. The GUI ru
 ## v0.56 — Run All Tests AIO (development branch only until next release)
 
 **Discover → Run All Tests…** provides a single setup window with a masked session key. It always runs offline install/update/rollback tests, and—with a verified game/credential combination—checks API metadata and can automatically choose one small public mod.io ZIP for **opted-in temporary integrity verification** (hard 64 MiB limit). The test deletes the ZIP and never stages or installs it. A copyable pass/fail report strips API keys, game/mod/account IDs, signed URLs and local paths. The tester must still approve any **real** game installation in Provider Inbox. Auto-selection is restricted to official records for the selected game; it is not an install or compatibility recommendation.
+
+## v0.56 AIO API-key-only input
+
+**Run All Tests…** now exposes a single masked **mod.io API key** input. It uses UniMod's selected installed game, checks for one unique public game match, and automatically selects an eligible ZIP only with explicit temporary download consent. Reuses an already verified account API path from the current session where possible. This key-only path uses the documented legacy public read-only mod.io API; some account-scoped keys may require their unique API path and cannot be verified from the key alone. Such a failure is reported clearly; the app never guesses user identities or performs installs. Private keys and signed URLs remain excluded from copyable reports.
