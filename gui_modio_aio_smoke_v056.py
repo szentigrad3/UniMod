@@ -43,12 +43,11 @@ with TemporaryDirectory() as temp:
             buttons={b.cget('text'):b for b in controls(dialog,'TButton')}
             entries=list(controls(dialog,'TEntry'))
             assert {'Run All Tests','Copy safe report','Close'}.issubset(buttons)
-            assert len(entries)==4, len(entries)
+            assert len(entries)==1, len(entries)
             passed={'offline':'Passed','game':'Passed','metadata':'Passed',
                     'download':'Passed','reason':'complete','selection':'Automatic public test mod'}
-            for index,value in enumerate(('123','456',KEY,'')):
-                entries[index].delete(0,'end')
-                entries[index].insert(0,value)
+            entries[0].delete(0,'end')
+            entries[0].insert(0,KEY)
             calls=[]
             def aio(*args, **kw):
                 calls.append((args,kw))
@@ -60,13 +59,15 @@ with TemporaryDirectory() as temp:
             assert confirm.called, 'No approval for automatic public download'
             assert len(calls)==1 and calls[0][1]['allow_transfer'] is True
             assert calls[0][1]['mod_id']==''
+            assert calls[0][1]['game_id']==''
+            assert calls[0][1]['user_id']==''
             assert calls[0][1]['api_key']==KEY
             buttons['Copy safe report'].invoke()
             copied=app.clipboard_get()
             assert 'Offline install/update/rollback: Passed' in copied
             assert 'Temporary ZIP download: Passed' in copied
             assert KEY not in copied and str(game_root) not in copied
-            assert app.modio_verified[:2]==('123','456')
+            assert app.modio_verified is None, 'Never invent an account ID from an API key'
             buttons['Close'].invoke()
 
             # A changed game while the background worker runs discards the
@@ -76,7 +77,8 @@ with TemporaryDirectory() as temp:
                         if w.winfo_class()=='Toplevel' and 'Run All Tests' in w.title())
             buttons={b.cget('text'):b for b in controls(dialog,'TButton')}
             entries=list(controls(dialog,'TEntry'))
-            entries[3].insert(0,'77')
+            entries[0].delete(0,'end')
+            entries[0].insert(0,KEY)
             def delayed(*args, **kw):
                 time.sleep(.20)
                 return passed
