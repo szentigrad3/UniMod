@@ -3619,17 +3619,29 @@ class App(tk.Tk):
             button.pack(fill='x',pady=(0,5));self.mod_action_buttons.append(button)
         # Inspector intentionally hidden until asked for, unlike v0.31.
         self._installed_sort=('name',False)
-        ttk.Label(sources,text='Discover mods — official provider catalogues',style='Section.TLabel').pack(anchor='w',pady=(0,7))
-        ttk.Label(sources,text='Read-only provider searches, including public Nexus Mods metadata. Results are leads, NOT installed-mod proof. Nexus file downloads and account features stay approval-gated.',wraplength=1040).pack(anchor='w',pady=(0,10))
+        ttk.Label(sources,text='Find Mods',style='Title.TLabel').pack(anchor='w',pady=(0,7))
+        ttk.Label(sources,text='1. Search for a mod   •   2. Check its official page   •   3. Review a downloaded file',
+                  style='Section.TLabel',wraplength=1000).pack(anchor='w',pady=(0,6))
+        ttk.Label(sources,text='Searching does not install anything. Not every website allows downloads inside UniMod.',
+                  style='Subtle.TLabel',wraplength=1000).pack(anchor='w',pady=(0,10))
         discovery=ttk.Frame(sources);discovery.pack(fill='x',pady=(0,10))
         self.provider_choice=tk.StringVar(value='Modrinth')
         self.provider_combo=ttk.Combobox(discovery,textvariable=self.provider_choice,
             state='readonly',width=16,values=provider_catalogues.PROVIDERS)
         self.provider_combo.pack(side='left',padx=(0,9))
         self.provider_query=tk.StringVar(value='')
-        ttk.Entry(discovery,textvariable=self.provider_query,width=36).pack(side='left',fill='x',expand=True,padx=(0,9))
-        ttk.Button(discovery,text='Search catalogue',command=self.provider_begin_search,style='Accent.TButton').pack(side='left')
-        credential_row=ttk.Frame(sources);credential_row.pack(fill='x',pady=(0,7))
+        self.provider_search_box=ttk.Entry(discovery,textvariable=self.provider_query,width=36)
+        self.provider_search_box.pack(side='left',fill='x',expand=True,padx=(0,9))
+        self.provider_search_box.bind('<Return>',lambda event:self.provider_begin_search())
+        ttk.Button(discovery,text='Search',command=self.provider_begin_search,style='Accent.TButton').pack(side='left')
+        setup_row=ttk.Frame(sources);setup_row.pack(fill='x',pady=(0,8))
+        self.provider_setup_button=ttk.Button(setup_row,text='Advanced provider setup  ▸',
+            command=self.toggle_provider_setup)
+        self.provider_setup_button.pack(side='left')
+        ttk.Label(setup_row,text='API keys, game IDs and developer tools only when needed',
+                  style='Subtle.TLabel').pack(side='left',padx=(12,0))
+        self.provider_advanced=ttk.Frame(sources)
+        credential_row=ttk.Frame(self.provider_advanced);credential_row.pack(fill='x',pady=(0,7))
         ttk.Label(credential_row,text='Community / Game ID:').pack(side='left',padx=(0,4))
         self.provider_scope=tk.StringVar(value='')
         ttk.Entry(credential_row,textvariable=self.provider_scope,width=22).pack(side='left',padx=(0,15))
@@ -3638,7 +3650,7 @@ class App(tk.Tk):
         ttk.Entry(credential_row,textvariable=self.provider_key,show='•',width=24).pack(side='left',padx=(0,6))
         ttk.Button(credential_row,text='Verify CurseForge game ID…',command=self.provider_verify_curseforge_game).pack(side='left',padx=(5,8))
         ttk.Label(credential_row,text='Memory only; CurseForge / mod.io',style='Subtle.TLabel').pack(side='left')
-        modio_row=ttk.Frame(sources);modio_row.pack(fill='x',pady=(0,7))
+        modio_row=ttk.Frame(self.provider_advanced);modio_row.pack(fill='x',pady=(0,7))
         ttk.Label(modio_row,text='mod.io User ID (from your API path):').pack(side='left',padx=(0,5))
         self.modio_user_id=tk.StringVar(value='')
         ttk.Entry(modio_row,textvariable=self.modio_user_id,width=16).pack(side='left',padx=(0,8))
@@ -3665,15 +3677,28 @@ class App(tk.Tk):
         provider_scroll=ttk.Scrollbar(provider_area,command=self.provider_tree.yview)
         provider_scroll.pack(side='right',fill='y');self.provider_tree.configure(yscrollcommand=provider_scroll.set)
         self.provider_tree.bind('<Double-1>',lambda *_:self.provider_open_result())
+        self.provider_tree.bind('<<TreeviewSelect>>',lambda *_:self.update_provider_next_step())
         self.provider_results=[];self.provider_loading=False
+        self.provider_next_step=tk.StringVar(value='Select a search result to see the next step. Nothing has been downloaded.')
+        ttk.Label(sources,textvariable=self.provider_next_step,wraplength=1000,
+                  style='Subtle.TLabel').pack(anchor='w',pady=(2,6))
         provider_buttons=ttk.Frame(sources);provider_buttons.pack(fill='x',pady=8)
-        ttk.Button(provider_buttons,text='Open selected official page',command=self.provider_open_result).pack(side='left')
-        ttk.Button(provider_buttons,text='Link reviewed page to selected mod…',command=self.provider_assign_reviewed_source).pack(side='left',padx=8)
-        ttk.Button(provider_buttons,text='Browse release files…',command=self.provider_files_dialog,style='Accent.TButton').pack(side='left',padx=9)
-        ttk.Button(provider_buttons,text='Test mod.io API…',command=self.provider_modio_diagnostic).pack(side='left',padx=7)
-        ttk.Button(provider_buttons,text='Thunderstore installer…',command=lambda:self.show_page('Thunderstore Search')).pack(side='left',padx=9)
-        ttk.Button(provider_buttons,text='Nexus account / registration…',command=lambda:self.show_page('Nexus Updates')).pack(side='right')
-        ttk.Button(provider_buttons,text='Provider access requirements…',command=self.provider_access_dialog).pack(side='right',padx=8)
+        ttk.Button(provider_buttons,text='Open official mod page',command=self.provider_open_result).pack(side='left',padx=(0,9))
+        ttk.Button(provider_buttons,text='Browse release files…',command=self.provider_files_dialog,
+                   style='Accent.TButton').pack(side='left',padx=(0,9))
+        ttk.Button(provider_buttons,text='Review downloaded files',command=self.provider_review_downloads).pack(side='left')
+        self.provider_expert_actions=ttk.Frame(self.provider_advanced)
+        self.provider_expert_actions.pack(fill='x',pady=(6,8))
+        ttk.Button(self.provider_expert_actions,text='Link reviewed page to selected mod…',
+                   command=self.provider_assign_reviewed_source).pack(side='left',padx=(0,8))
+        ttk.Button(self.provider_expert_actions,text='Test mod.io API…',
+                   command=self.provider_modio_diagnostic).pack(side='left',padx=(0,8))
+        ttk.Button(self.provider_expert_actions,text='Thunderstore installer…',
+                   command=lambda:self.show_page('Thunderstore Search')).pack(side='left',padx=(0,8))
+        ttk.Button(self.provider_expert_actions,text='Nexus account / registration…',
+                   command=lambda:self.show_page('Nexus Updates')).pack(side='left',padx=(0,8))
+        ttk.Button(self.provider_expert_actions,text='Provider access requirements…',
+                   command=self.provider_access_dialog).pack(side='left')
         # Nexus status tab: exact-ID lookup only, with a session-only API key.
         nexus=ttk.Frame(self.tabs,padding=12); self.tabs.add(nexus,text='  Nexus Updates  ')
         ttk.Label(nexus,text='Nexus Mods — exact-ID update checks',style='Section.TLabel').pack(anchor='w',pady=(0,6))
@@ -5370,6 +5395,43 @@ class App(tk.Tk):
             status.set(f'{len(rows)} file records found (first page only). Metadata is not installation approval.')
         threading.Thread(target=worker,daemon=True).start();dlg.after(100,poll)
 
+    def toggle_provider_setup(self, open=None):
+        """Show advanced provider fields on demand without clearing session values."""
+        visible=bool(self.provider_advanced.winfo_manager())
+        desired=not visible if open is None else bool(open)
+        if desired and not visible:
+            self.provider_advanced.pack(fill='x',after=self.provider_setup_button.master,pady=(0,8))
+        elif not desired and visible:
+            self.provider_advanced.pack_forget()
+        self.provider_setup_button.configure(
+            text='Advanced provider setup  ▾' if desired else 'Advanced provider setup  ▸')
+
+    def update_provider_next_step(self):
+        """Describe the selected provider's supported next action, without promising installation."""
+        selected=self.provider_tree.selection()
+        if len(selected)!=1:
+            self.provider_next_step.set('Select a search result to see the next step. Nothing has been downloaded.')
+            return
+        try:
+            result=self.provider_results[int(selected[0])]
+        except (ValueError,IndexError,KeyError,TypeError):
+            self.provider_next_step.set('Choose a result from the search list.')
+            return
+        provider=result.get('provider')
+        if provider in ('GitHub','Modrinth','mod.io','CurseForge'):
+            message=('Review this mod’s official page and choose Browse release files. '
+                     'If you download a file, review it in Downloads before installing. '
+                     'Support depends on provider and file type.')
+        else:
+            message=('Review this mod’s official page. In-app file downloads are not '
+                     'supported for this provider; use the official website instead.')
+        self.provider_next_step.set(message)
+
+    def provider_review_downloads(self):
+        """Navigate to the existing staged-file review; never start an installation."""
+        self.provider_stage_refresh()
+        self.show_page('Provider Inbox')
+
     def provider_begin_search(self):
         if self.provider_loading:return
         provider=self.provider_choice.get()
@@ -5401,7 +5463,10 @@ class App(tk.Tk):
                 scope=expected  # Never search an arbitrary game from stale text input.
                 self.provider_scope.set(expected)
         except provider_catalogues.ProviderError as exc:
-            self.provider_info.set(str(exc));return
+            self.provider_info.set(str(exc))
+            if provider in ('CurseForge','mod.io'):
+                self.toggle_provider_setup(open=True)
+            return
         self.provider_loading=True
         self.after(80,self._poll_provider_events)
         self.provider_info.set('Searching '+provider+'… (no installation or source assignment)')
@@ -5447,6 +5512,7 @@ class App(tk.Tk):
             records=[rec for _,_,rec in sorted(graded)]
         self.provider_results=records
         self.provider_tree.delete(*self.provider_tree.get_children())
+        self.update_provider_next_step()
         for i,rec in enumerate(records):
             detail=rec.get('description','')
             if same_game:
