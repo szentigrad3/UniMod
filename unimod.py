@@ -3905,15 +3905,16 @@ class App(tk.Tk):
         ttk.Button(more_main,text='Choose Nexus file…',command=self.unified_choose_file).pack(side='left',padx=(0,8))
         ttk.Button(more_main,text='Select ready ZIPs',command=self.unified_select_ready).pack(side='left',padx=(0,8))
         ttk.Button(more_main,text='Review update batch…',command=self.unified_review_batch).pack(side='left')
-        more_other=ttk.Frame(self.updates_advanced);more_other.pack(fill='x')
+        more_other=ttk.Frame(self.updates_advanced);more_other.pack(fill='x',pady=(0,6))
         ttk.Button(more_other,text='Full update inbox',
                    command=lambda:self.show_page('Update Inbox')).pack(side='left',padx=(0,8))
         ttk.Button(more_other,text='Refresh installed mods',command=self.refresh).pack(side='left',padx=(0,8))
         ttk.Button(more_other,text='Match missing sources',
-                   command=lambda:self.show_page('Source Matching')).pack(side='left',padx=(0,8))
-        ttk.Button(more_other,text='Nexus account options',
+                   command=lambda:self.show_page('Source Matching')).pack(side='left')
+        more_sources=ttk.Frame(self.updates_advanced);more_sources.pack(fill='x')
+        ttk.Button(more_sources,text='Nexus account options',
                    command=lambda:self.show_page('Nexus Updates')).pack(side='left',padx=(0,8))
-        self.unified_source_button=ttk.Button(more_other,text='Resolve mod sources…',
+        self.unified_source_button=ttk.Button(more_sources,text='Resolve mod sources…',
                                                command=self.unified_identify_sources)
         self.unified_source_button.pack(side='left')
         ttk.Label(updates,text='Version checks do not install anything. Updates always require review and confirmation.',
