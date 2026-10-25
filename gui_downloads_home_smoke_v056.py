@@ -26,7 +26,7 @@ with TemporaryDirectory() as temp:
             app.update()
             assert app.tabs.tab(app.tabs.select(),'text').strip()=='Downloads'
             assert '1 downloaded provider file(s)' in app.downloads_provider_summary.get()
-            home=app._tab_with_name('Downloads')
+            home=app.nametowidget(app._tab_with_name('Downloads'))
             labels={x.cget('text'):x for x in buttons(home)}
             assert 'Review provider downloads' in labels
             assert 'Review Nexus / ZIP downloads' in labels
