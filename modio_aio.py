@@ -5,6 +5,7 @@ mod via the official read-only API, and optionally downloads one small ZIP to a
 temporary folder for integrity checking. Never stages or installs anything.
 """
 import re
+from urllib.parse import urlencode
 
 import modio_diagnostics
 import modio_files
@@ -37,7 +38,7 @@ def run_aio(game, *, game_id='', user_id='', api_key='', mod_id='',
     """
     report = {'offline': 'Not tested', 'game': 'Not tested',
               'metadata': 'Not tested', 'download': 'Not tested',
-              'reason': 'none', 'verified_bytes': 0}
+              'reason': 'none', 'verified_bytes': 0, 'selection': 'Not selected'}
     _emit(progress, 'offline')
     try:
         outcome = (offline_run or modio_selftest.run)()
@@ -69,19 +70,45 @@ def run_aio(game, *, game_id='', user_id='', api_key='', mod_id='',
         report['reason'] = 'game_api'
         return report
 
-    if not isinstance(mod_id, str) or not re.fullmatch(r'[1-9][0-9]{0,11}', mod_id):
-        report['reason'] = 'choose_mod'
-        return report
-
     _emit(progress, 'metadata')
     try:
-        identity = game_id + '/' + mod_id
-        rows = modio_files.list_modfiles(identity, user_id=user_id, api_key=api_key, fetch=fetch)
+        selected = isinstance(mod_id, str) and re.fullmatch(r'[1-9][0-9]{0,11}', mod_id)
+        rows = []
+        if selected:
+            identity = game_id + '/' + mod_id
+            report['selection'] = 'Selected mod'
+            rows = modio_files.list_modfiles(identity, user_id=user_id, api_key=api_key, fetch=fetch)
+        elif allow_transfer:
+            # An explicitly approved, temporary-only test may use one public
+            # release from the verified game. Never auto-install that ZIP.
+            base = modio_files._base(user_id, api_key)
+            address = f'{base}/games/{game_id}/mods?' + urlencode({
+                'api_key': api_key.strip(), '_limit': 20})
+            page = catalogue.fetch_json(address, fetch=fetch)
+            if not isinstance(page, dict) or not isinstance(page.get('data'), list):
+                raise ValueError('Invalid mod listing')
+            for mod in page['data'][:8]:
+                if not isinstance(mod, dict) or (mod.get('game_id') is not None
+                    and str(mod['game_id']) != game_id):
+                    continue
+                proposed = str(mod.get('id') or '')
+                if not re.fullmatch(r'[1-9][0-9]{0,11}', proposed):
+                    continue
+                candidate = modio_files.list_modfiles(
+                    game_id+'/'+proposed, user_id=user_id, api_key=api_key, fetch=fetch)
+                if any(type(r.get('size')) is int and
+                       0 < r['size'] <= modio_live_probe.MAX_PROBE_BYTES for r in candidate):
+                    identity,rows = game_id+'/'+proposed,candidate
+                    report['selection'] = 'Automatic public test mod'
+                    break
+        else:
+            report['reason'] = 'choose_mod'
+            return report
         if not rows:
             report['metadata'] = 'Passed'
             report['reason'] = 'no_eligible_zip'
             return report
-        # The exact file refresh also validates that the file has not changed.
+        # Verify exact identity and source metadata before any transfer.
         modio_files.refresh_selected(rows[0], user_id=user_id, api_key=api_key, fetch=fetch)
         report['metadata'] = 'Passed'
     except Exception:
@@ -123,7 +150,7 @@ HELP = {
     'connect': 'Enter your mod.io Game ID, API-path User ID and private key once.',
     'wrong_game': 'The mod.io game does not match your selected installed game.',
     'game_api': 'Game verification failed. Check your connection and credentials.',
-    'choose_mod': 'Select a mod, or enter its numeric mod.io ID, to test a download.',
+    'choose_mod': 'Select a mod, or approve an automatic public ZIP test.',
     'metadata_api': 'Mod release metadata could not be verified.',
     'no_eligible_zip': 'This mod has no eligible public ZIP to test.',
     'zip_too_large': 'No eligible ZIP is under the 64 MiB safety limit.',
@@ -146,6 +173,8 @@ def public_report(result):
             'Official game verification: ' + value('game') + '\n'
             'Mod release metadata: ' + value('metadata') + '\n'
             'Temporary ZIP download: ' + value('download') + '\n'
+            'Mod selection: ' + (state.get('selection') if state.get('selection') in
+                ('Selected mod', 'Automatic public test mod') else 'Not selected') + '\n'
             'Result: ' + HELP[reason] + '\n'
             'Real-game installation: Not attempted\n'
             'Private key, account IDs, mod IDs, paths and download URLs: excluded.\n')
