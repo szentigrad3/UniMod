@@ -22,7 +22,7 @@ with tempfile.TemporaryDirectory() as folder, \
         assert app.tools_button.winfo_ismapped(), 'Advanced menu must remain accessible'
         expected = {
             'Overview', 'Installed Mods', 'Mod Websites',
-            'Updates Available', 'Update Inbox', 'All Games & Mods'
+            'Updates Available', 'Downloads', 'All Games & Mods'
         }
         assert expected.issubset(app.rail_buttons)
         assert all(len(app.rail_buttons[name].cget('text').strip()) > 3 for name in expected)
