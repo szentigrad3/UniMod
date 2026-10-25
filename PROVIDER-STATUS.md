@@ -46,3 +46,7 @@ After verifying a supported game, open **Discover → mod.io → Browse release 
 ## Beginner mod.io tester guide — v0.56 development
 
 Click **Discover → Help me test mod.io…** for next-step instructions, ready/not-ready statuses, buttons taking you to the appropriate screens and **Copy safe test report**. It reports current-session pass/fail for the read-only API metadata check and the install-free temporary ZIP transfer. Changing the selected game, mod or API key invalidates previous success reports. Reports omit keys, account/game/mod IDs, signed URLs and local paths. The guide does **not** perform an installation: Provider Inbox installs remain separate and approval-gated. This is a development feature on `main`, not yet included in the published v0.55.0-test12 AppImage.
+
+### No-terminal offline safety check
+
+Click **Run built-in safety test** inside **Help me test mod.io…**. The GUI runs the existing offline mod.io lifecycle check in a background thread using only temporary fake game files. A plain pass/fail status appears in the guide and the copyable privacy-safe report. This does not contact mod.io or install real mods; live API/CDN and actual game behaviour still require separate validation.

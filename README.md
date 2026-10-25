@@ -38,7 +38,7 @@ From the current source directory, run `python3 unimod.py`, select **Discover**,
 3. Open the release files and use **Test download (temporary)** on a ZIP up to 64 MiB. This fetches, verifies, then deletes a temporary ZIP without installing anything.
 4. For a real install, stage a separate reviewed ZIP and inspect it in **Provider Inbox**. Installation always needs confirmation and is available only for supported layouts.
 
-The guide has a **Copy safe test report** button for bug reports. It never includes API keys, local paths, mod/account IDs or signed download URLs. A reported pass is tied to the current game, mod and key session. An offline self-test is also available with `python3 unimod.py --modio-self-test`, but it does not replace the live check.
+The guide also has a **Run built-in safety test** button. It checks a disposable fake game's download, installation, update and rollback **without using your API key, a terminal or your real game files**. The guide shows Pass/Fail and includes it in the **Copy safe test report** output for bug reports. It never includes API keys, local paths, mod/account IDs or signed download URLs. A reported pass is tied to the current game, mod and key session. An offline self-test is also available with `python3 unimod.py --modio-self-test`, but it does not replace the live check.
 
 ## Safe installation model
 

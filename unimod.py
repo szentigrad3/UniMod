@@ -3575,6 +3575,8 @@ class App(tk.Tk):
         ttk.Label(modio_row,text='Session key only; read-only catalogue and reviewed modfile downloads',style='Subtle.TLabel').pack(side='left')
         self.modio_verified=None
         self._modio_test_results={}  # Session-only and bound to the verified game/mod/key.
+        self._modio_offline_result='Not tested'
+        self._modio_offline_busy=False
         self._modio_verification_events=queue.Queue()
         self.curseforge_verified=None
         self._curseforge_verification_events=queue.Queue()
@@ -5411,10 +5413,12 @@ class App(tk.Tk):
             except (IndexError,KeyError,TypeError,ValueError,tk.TclError):
                 selected=None
                 game=None
-            return modio_guide.snapshot(
+            state=modio_guide.snapshot(
                 game,self.provider_choice.get(),self.provider_scope.get(),
                 self.modio_user_id.get(),self.provider_key.get(),
                 self.modio_verified,selected,self._modio_test_results)
+            state['offline_test']=self._modio_offline_result
+            return state
         def refresh():
             report=current_snapshot()
             next_text.set('NEXT: '+modio_guide.next_step(report))
@@ -5464,6 +5468,41 @@ class App(tk.Tk):
                   'Your API key, account IDs, signed URLs and local paths are excluded.',
                   wraplength=670).pack(anchor='w')
         buttons=ttk.Frame(root);buttons.pack(fill='x',pady=(10,0))
+        def run_offline():
+            if self._modio_offline_busy:return
+            self._modio_offline_busy=True
+            self._modio_offline_result='Not tested'
+            offline_button.configure(state='disabled')
+            selected_info.set('Running a safe offline test in a disposable game folder…')
+            events=queue.Queue()
+            def worker():
+                try:
+                    from modio_selftest import run
+                    report=run()
+                    # The self-test normally raises on failure. Reject incomplete reports too.
+                    keys=('installed','updated','backups','tamper_refused','wrong_game_refused',
+                          'bad_download_refused','failed_update_restored','secrets_not_persisted')
+                    result='Passed' if all(report.get(k)==1 for k in keys) else 'Failed'
+                except Exception:
+                    result='Failed'
+                events.put(result)
+            def poll():
+                try:result=events.get_nowait()
+                except queue.Empty:
+                    if self.winfo_exists():self.after(100,poll)
+                    return
+                self._modio_offline_result=result
+                self._modio_offline_busy=False
+                if dialog.winfo_exists():
+                    offline_button.configure(state='normal')
+                    selected_info.set(('Offline safety test PASSED. No real games changed.' if result=='Passed'
+                                       else 'Offline safety test FAILED. Copy the safe report for a bug report.'))
+                    refresh()
+            threading.Thread(target=worker,daemon=True).start()
+            self.after(100,poll)
+        offline_button=ttk.Button(buttons,text='Run built-in safety test',command=run_offline)
+        offline_button.pack(side='left',padx=(0,9))
+        if self._modio_offline_busy:offline_button.configure(state='disabled')
         def copy_report():
             self.clipboard_clear()
             self.clipboard_append(modio_guide.safe_report(current_snapshot()))
