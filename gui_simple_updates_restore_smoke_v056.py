@@ -46,7 +46,7 @@ with TemporaryDirectory() as temp:
             assert app.tabs.tab(app.tabs.select(),'text').strip()=='Updates Available'
             assert not app.updates_advanced.winfo_ismapped()
             primary=[button.cget('text') for button in find_widgets(app.updates_actions,ttk.Button)]
-            for name in ('Find downloaded updates','Review selected update…',
+            for name in ('Review ready updates…','Review selected update…',
                          'Restore a backup…','More update options  ▸'):
                 assert name in primary,(name,primary)
             assert len(primary)==4,primary
