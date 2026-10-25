@@ -5466,10 +5466,11 @@ class App(tk.Tk):
         def start():
             if self._modio_aio_running:return
             approve=bool(transfer.get())
-            if approve and mod_id.get().strip():
+            if approve:
                 approve=messagebox.askyesno('Approve temporary test download',
-                    'UniMod may transfer one ZIP up to 64 MiB from the selected mod.io project. '
-                    'It will verify and delete the file, without installing it. Continue?',
+                    'UniMod may transfer one public ZIP up to 64 MiB for the verified game. '
+                    'When no Mod ID is entered, it will pick a public test mod automatically. '
+                    'The ZIP will be verified and deleted, never installed. Continue?',
                     parent=dialog)
                 if not approve:
                     status.set('Download permission declined; offline and metadata checks can still run.')
