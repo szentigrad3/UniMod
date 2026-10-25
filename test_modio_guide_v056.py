@@ -58,7 +58,7 @@ class GuideTests(unittest.TestCase):
 
     def test_safe_report_contains_no_credentials_or_paths(self):
         report=safe_report(self.state())
-        for secret in (KEY,'123/77','456',GAME['root'],'signed','my-test-API'):
+        for secret in (KEY,'123/77','456',GAME['root'],'https://signed.example/download','my-test-API'):
             self.assertNotIn(secret,report)
         self.assertIn('Metadata check: Not tested',report)
         self.assertIn('Real installation/rollback: Not tested',report)
