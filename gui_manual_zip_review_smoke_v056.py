@@ -33,7 +33,14 @@ with tempfile.TemporaryDirectory() as temp:
                 app.install_archive()
                 assert (mods/'Example'/'manifest.json').exists()
                 assert notice.called
-            with patch.object(unimod.messagebox,'askyesno',return_value=False) as prompt:
+            # A newer version of the same unique ID must not be reinstalled
+            # directly; it must lead to the backup-aware update workflow.
+            with zipfile.ZipFile(archive,'w') as z:
+                z.writestr('Example/manifest.json',json.dumps({
+                    'Name':'Example','UniqueID':'Tests.Example','Version':'1.1'}))
+            with patch.object(unimod.messagebox,'askyesno',return_value=False) as prompt, \
+                 patch.object(unimod.messagebox,'showwarning',
+                              side_effect=AssertionError('Unexpected blocked ZIP')):
                 app.install_archive()
                 assert prompt.call_count==1
                 assert 'Update found' in prompt.call_args.args[0]
