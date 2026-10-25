@@ -52,3 +52,4 @@ jobs:
           xvfb-run -a .buildvenv/bin/python gui_guided_install_smoke_v056.py
           xvfb-run -a .buildvenv/bin/python gui_manual_zip_review_smoke_v056.py
           xvfb-run -a .buildvenv/bin/python gui_simple_updates_restore_smoke_v056.py
+          xvfb-run -a .buildvenv/bin/python gui_one_click_updates_smoke_v056.py
