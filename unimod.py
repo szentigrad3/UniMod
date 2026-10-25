@@ -3110,7 +3110,7 @@ def restore_backup(game,entry):
                             prefix='.unimod-restore-',suffix='.tmp',delete=False) as out:
                         temporary=Path(out.name)
                         json.dump(new_entry,out,indent=2)
-                        out.write('\\n')
+                        out.write('\n')
                         out.flush()
                         os.fsync(out.fileno())
                     temporary.replace(new_meta)
