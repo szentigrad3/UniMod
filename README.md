@@ -2,7 +2,7 @@
 
 A Linux-first desktop mod manager for discovering existing game mods, reviewing updates and safely applying supported mod packages.
 
-**Current status:** `0.55.0-test12` — public **development preview**, not a stable release. Maintained by [@szentigrad3](https://github.com/szentigrad3). Code is MIT-licensed; bundled dependencies retain their own licences.
+**Latest public release:** `v0.55.0-test12` (development preview). The `main` branch contains **unreleased v0.56 features**. Neither is a stable release. Maintained by [@szentigrad3](https://github.com/szentigrad3). Code is MIT-licensed; bundled dependencies retain their own licences.
 
 UniMod is intended to make it easier to manage mods from different providers without bypassing creator permissions or provider download restrictions.
 
@@ -27,7 +27,18 @@ python3 unimod.py
 
 On Arch/CachyOS, Tkinter is usually supplied by the system Python package. Optional integrations use Pillow, `tomli` for Python 3.10, and `websocket-client` as described in [`requirements-optional.txt`](requirements-optional.txt).
 
-**Linux binaries:** Until a standard AppImage has passed the GitHub Actions build, the existing self-extracting `.AppImage`-named development binary should be treated as experimental. Do not present it as a verified AppImageKit Type 2 release. The [`build-appimage.sh`](build-appimage.sh) script and [AppImage workflow](.github/workflows/appimage.yml) define the intended standard build path.
+**Linux binaries:** The public development pre-release has a standard AppImage built and smoke-tested by GitHub Actions. The latest unreleased `main` features are available from source until a new AppImage is built and verified. See the [AppImage workflow](.github/workflows/appimage.yml).
+
+## New tester? Start here (v0.56 development)
+
+From the current source directory, run `python3 unimod.py`, select **Discover**, and click **Help me test mod.io…**. The guide shows the next step and links directly to each relevant screen.
+
+1. Choose a supported installed game, select **mod.io**, and enter its game ID, your mod.io account API-path ID, and your personal API key **inside UniMod only**.
+2. Verify the game name, search for one mod, and run the read-only API check.
+3. Open the release files and use **Test download (temporary)** on a ZIP up to 64 MiB. This fetches, verifies, then deletes a temporary ZIP without installing anything.
+4. For a real install, stage a separate reviewed ZIP and inspect it in **Provider Inbox**. Installation always needs confirmation and is available only for supported layouts.
+
+The guide has a **Copy safe test report** button for bug reports. It never includes API keys, local paths, mod/account IDs or signed download URLs. A reported pass is tied to the current game, mod and key session. An offline self-test is also available with `python3 unimod.py --modio-self-test`, but it does not replace the live check.
 
 ## Safe installation model
 
