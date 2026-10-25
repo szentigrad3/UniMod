@@ -16,6 +16,8 @@ with tempfile.TemporaryDirectory() as folder, \
         app.update()
         assert app.tabs.tab(app.tabs.select(), 'text').strip() == 'Overview'
         assert app.more_button.winfo_ismapped(), 'More menu must be visible'
+        assert app.header_install.winfo_ismapped(), 'Install ZIP must be easy to find'
+        assert app.home_empty.winfo_ismapped(), 'First-run instructions must be visible'
         assert not app.profile_menu.winfo_ismapped(), 'Profiles belong in More'
         assert app.tools_button.winfo_ismapped(), 'Advanced menu must remain accessible'
         expected = {
