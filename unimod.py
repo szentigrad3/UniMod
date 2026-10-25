@@ -22,6 +22,7 @@ import modio_files
 import modio_managed
 import modio_diagnostics
 import modio_live_probe
+import modio_guide
 import provider_staging
 import minecraft_profiles
 import minecraft_dependencies
@@ -3570,8 +3571,10 @@ class App(tk.Tk):
         self.modio_user_id=tk.StringVar(value='')
         ttk.Entry(modio_row,textvariable=self.modio_user_id,width=16).pack(side='left',padx=(0,8))
         ttk.Button(modio_row,text='Verify mod.io game ID…',command=self.provider_verify_modio_game).pack(side='left',padx=(0,8))
+        ttk.Button(modio_row,text='Help me test mod.io…',command=self.provider_modio_test_guide,style='Accent.TButton').pack(side='left',padx=(0,8))
         ttk.Label(modio_row,text='Session key only; read-only catalogue and reviewed modfile downloads',style='Subtle.TLabel').pack(side='left')
         self.modio_verified=None
+        self._modio_test_results={}  # Session-only and bound to the verified game/mod/key.
         self._modio_verification_events=queue.Queue()
         self.curseforge_verified=None
         self._curseforge_verification_events=queue.Queue()
@@ -5381,6 +5384,96 @@ class App(tk.Tk):
         # URLs originate from safe provider-specific constructors/parsers.
         webbrowser.open(url)
 
+    def provider_modio_test_guide(self):
+        """Plain-English, click-through help for mod.io testing and safe bug reports."""
+        dialog=tk.Toplevel(self)
+        dialog.title('mod.io — easy testing guide')
+        width=min(730,max(580,self.winfo_screenwidth()-100))
+        height=min(700,max(520,self.winfo_screenheight()-140))
+        dialog.geometry(f'{width}x{height}')
+        dialog.minsize(550,490)
+        dialog.transient(self)
+        root=ttk.Frame(dialog,padding=(20,16))
+        root.pack(fill='both',expand=True)
+        ttk.Label(root,text='Test mod.io — step by step',style='Title.TLabel').pack(anchor='w')
+        ttk.Label(root,text='No terminal commands needed. Start with your installed game, then follow the buttons below. '
+            'Nothing installs automatically; the download test deletes its temporary ZIP.',
+            wraplength=670).pack(anchor='w',pady=(5,12))
+        next_text=tk.StringVar()
+        ttk.Label(root,textvariable=next_text,style='Section.TLabel',wraplength=670).pack(anchor='w',pady=(0,10))
+        state_text=[]
+        selected_info=tk.StringVar()
+        def current_snapshot():
+            try:
+                game=self.current()
+                chosen=self.provider_tree.selection()
+                selected=self.provider_results[int(chosen[0])] if len(chosen)==1 else None
+            except (IndexError,KeyError,TypeError,ValueError,tk.TclError):
+                selected=None
+                game=None
+            return modio_guide.snapshot(
+                game,self.provider_choice.get(),self.provider_scope.get(),
+                self.modio_user_id.get(),self.provider_key.get(),
+                self.modio_verified,selected,self._modio_test_results)
+        def refresh():
+            report=current_snapshot()
+            next_text.set('NEXT: '+modio_guide.next_step(report))
+            flags=[
+                'Ready' if report['game_selected'] else 'Choose a game',
+                'Verified' if report['game_verified'] else 'Not verified',
+                'Selected' if report['mod_selected'] else 'No mod selected',
+                report['metadata_test'], report['download_test'], 'Optional'
+            ]
+            for variable,flag in zip(state_text,flags):variable.set(flag)
+        def go(page,callback=None):
+            dialog.destroy()
+            if page=='Mod Websites':self.provider_choice.set('mod.io')
+            self.show_page(page)
+            if callback:callback()
+        def step(title,description,button,callback):
+            row=ttk.Frame(root,padding=(0,6))
+            row.pack(fill='x')
+            left=ttk.Frame(row)
+            left.pack(side='left',fill='x',expand=True)
+            line=ttk.Frame(left);line.pack(fill='x')
+            ttk.Label(line,text=title,style='Section.TLabel').pack(side='left')
+            status=tk.StringVar();state_text.append(status)
+            ttk.Label(line,textvariable=status,style='Subtle.TLabel').pack(side='left',padx=12)
+            ttk.Label(left,text=description,wraplength=475).pack(anchor='w',pady=(2,0))
+            ttk.Button(row,text=button,command=callback).pack(side='right',padx=(8,0))
+        step('1. Pick your game',
+             'Choose an installed Stardew Valley (SMAPI) or supported BepInEx game.',
+             'Choose game',lambda:go('All Games & Mods'))
+        step('2. Connect your mod.io account',
+             'Enter game ID, account API-path ID and key. Confirm the game title.',
+             'Set up / verify',lambda:go('Mod Websites'))
+        step('3. Find a mod',
+             'Search, then click one mod in the list. Check that the page is the right game.',
+             'Search mods',lambda:go('Mod Websites'))
+        step('4. Test API connection',
+             'Checks metadata only. No ZIP download or game changes.',
+             'Run metadata check',lambda:go('Mod Websites',self.provider_modio_diagnostic))
+        step('5. Test one download',
+             'Select a small ZIP (up to 64 MiB), then click Test download (temporary).',
+             'Open release files',lambda:go('Mod Websites',self.provider_files_dialog))
+        step('6. Review an installation (optional)',
+             'A separate inbox download needs review and approval before it can install.',
+             'Open Provider Inbox',lambda:go('Provider Inbox',self.provider_stage_refresh))
+        ttk.Separator(root).pack(fill='x',pady=(12,9))
+        ttk.Label(root,text='Need help? Copy a safe test report and paste it into a GitHub issue. '
+                  'Your API key, account IDs, signed URLs and local paths are excluded.',
+                  wraplength=670).pack(anchor='w')
+        buttons=ttk.Frame(root);buttons.pack(fill='x',pady=(10,0))
+        def copy_report():
+            self.clipboard_clear()
+            self.clipboard_append(modio_guide.safe_report(current_snapshot()))
+            selected_info.set('Safe report copied. Paste it into your GitHub issue.')
+        ttk.Button(buttons,text='Copy safe test report',command=copy_report).pack(side='left')
+        ttk.Button(buttons,text='Refresh steps',command=refresh).pack(side='left',padx=8)
+        ttk.Button(buttons,text='Close',command=dialog.destroy).pack(side='right')
+        ttk.Label(root,textvariable=selected_info,style='Subtle.TLabel').pack(anchor='w',pady=(7,0))
+        refresh()
+
     def provider_modio_diagnostic(self):
         """Check a selected mod's live read-only API path without changing files."""
         if getattr(self, '_modio_diagnostic_busy', False):
@@ -5462,9 +5555,13 @@ class App(tk.Tk):
             self.provider_info.set('mod.io game, selection or credentials changed; diagnostic results discarded.')
             return
         if error:
+            self._modio_test_results['metadata']={
+                'context':(game_root,identity,uid,digest),'result':'Failed'}
             self.provider_info.set('mod.io API diagnostic: ' + error)
             messagebox.showwarning('mod.io API diagnostic', error, parent=self)
             return
+        self._modio_test_results['metadata']={
+            'context':(game_root,identity,uid,digest),'result':'Passed'}
         self.provider_info.set('mod.io API diagnostic completed; no file downloaded or installed.')
         messagebox.showinfo('mod.io API diagnostic',
             f"Game ID: {report['game_id']} | Mod ID: {report['mod_id']}\n"
@@ -5566,6 +5663,8 @@ class App(tk.Tk):
                 if not unchanged:
                     info.set('Selection, game or mod.io session changed; temporary test result discarded.')
                     return
+                self._modio_test_results['download']={
+                    'context':(game_root,identity,uid,key_digest),'result':'Passed'}
                 info.set('Temporary ZIP verified; deleted after the test. Nothing staged or installed.')
                 messagebox.showinfo('mod.io temporary download verification',
                     f"Game/mod: {report['game_id']}/{report['mod_id']}\n"
@@ -5576,6 +5675,19 @@ class App(tk.Tk):
                     'This proves this one file transferred and passed checksum verification, not game compatibility.',
                     parent=dialog)
                 return
+            if kind=='probe-error':
+                try:
+                    current_game=self.current()
+                    if (current_game and modio_context
+                            and str(Path(current_game['root']).resolve())==modio_context[2]
+                            and self.provider_key.get().strip()==modio_context[1]):
+                        self._modio_test_results['download']={
+                            'context':(modio_context[2],identity,modio_context[0],
+                                       hashlib.sha256(modio_context[1].encode()).digest()),
+                            'result':'Failed'}
+                except (KeyError,TypeError,ValueError,OSError):
+                    pass
+                info.set(payload);return
             if kind=='error':
                 info.set(payload);return
             if kind=='download':
@@ -5645,9 +5757,9 @@ class App(tk.Tk):
                     events.put(('probe',(report,reviewed_iid,game_root,uid,key_digest)))
                 except (modio_live_probe.ProbeError,modio_files.ModioError,
                         provider_downloads.DownloadError,provider_catalogues.ProviderError) as exc:
-                    events.put(('error',str(exc)))
+                    events.put(('probe-error',str(exc)))
                 except Exception:
-                    events.put(('error','Temporary mod.io download verification could not complete.'))
+                    events.put(('probe-error','Temporary mod.io download verification could not complete.'))
             threading.Thread(target=work,daemon=True).start();dialog.after(100,poll)
         def stage_file():
             if state['busy'] or not tree.selection():return
