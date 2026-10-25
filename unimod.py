@@ -193,6 +193,36 @@ def infer_mod_layout(root,title=''):
         except OSError:pass
     return None
 
+def plan_game_registration(folder, existing=()):
+    """Read-only registration preview for a user-chosen game directory.
+
+    Never guess an unknown mod loader or add a duplicate record. Registering
+    is a separate explicit UI action. No game directories are created here.
+    """
+    selected=Path(folder).expanduser()
+    if not selected.is_absolute() or selected.is_symlink() or not selected.is_dir():
+        raise ValueError('Select an existing game folder, not a link or missing directory.')
+    try:
+        root=selected.resolve(strict=True)
+    except (OSError,RuntimeError):
+        raise ValueError('Cannot open that game folder.') from None
+    name=root.name.strip()[:180]
+    if not name:raise ValueError('Choose a named game installation folder.')
+    kind=infer_mod_layout(root,name)
+    match=None
+    for index,game in enumerate(existing):
+        if not isinstance(game,dict):continue
+        try:
+            if Path(game['root']).resolve(strict=True)==root:
+                match=index
+                break
+        except (KeyError,TypeError,ValueError,OSError,RuntimeError):
+            continue
+    return {'name':name,'root':str(root),
+            'kind':kind if kind in ('smapi','bepinex','melonloader') else None,
+            'existing_index':match}
+
+
 def _verified_launcher_game(title, installed_path, launcher, store='', reference=''):
     """Import only existing, non-symlink game installations with identifiable mod layouts.
 
@@ -7200,16 +7230,49 @@ class App(tk.Tk):
         self.fill_games()
         if not silent:self.status.set(f'Detected {len(found)} modded installations across Steam, Heroic and Lutris; added {added} new game(s).')
     def add_game(self):
-        p=filedialog.askdirectory(title='Choose game installation folder')
-        if not p:return
-        name=simpledialog.askstring('Game title','Game name:',initialvalue=Path(p).name,parent=self)
-        if not name:return
-        guess=infer_mod_layout(p,name) or ('smapi' if 'stardew' in name.lower() else 'bepinex')
-        kind=simpledialog.askstring('Mod layout','Type smapi, bepinex, melonloader, or generic:',initialvalue=guess,parent=self)
-        if not kind:return
-        kind=kind.lower().strip()
-        if kind not in ('smapi','bepinex','melonloader','generic'):messagebox.showerror('Invalid type','Choose smapi, bepinex, melonloader, or generic');return
-        self.data['games'].append({'name':name,'root':p,'kind':kind});cfg_save(self.data);self.selected=len(self.data['games'])-1;self.unified_nexus={};self.unified_github={};self.nexus_results={};self.fill_games()
+        folder=filedialog.askdirectory(title='Choose the folder where your game is installed')
+        if not folder:return
+        try:plan=plan_game_registration(folder,self.data['games'])
+        except ValueError as exc:
+            messagebox.showwarning('Cannot add this game',str(exc),parent=self)
+            return
+        if plan['existing_index'] is not None:
+            self.selected=plan['existing_index']
+            self.fill_games()
+            self.show_page('Overview')
+            messagebox.showinfo('Already added',
+                                'This game is already in UniMod. Switched to its existing entry.',
+                                parent=self)
+            return
+        kind=plan['kind']
+        if kind is None:
+            if not messagebox.askyesno(
+                    'Mod setup not recognised',
+                    'I found the game folder, but cannot identify a supported mod setup. '
+                    'UniMod will not guess a loader.\n\n'
+                    'Do you want to choose one manually? Nothing will be installed by adding the game.',
+                    parent=self):
+                return
+            answer=simpledialog.askstring(
+                'Advanced mod setup',
+                'Choose one: smapi, bepinex, melonloader or generic.\n'
+                'Only choose a format you know your game supports.',
+                parent=self)
+            if answer is None:return
+            kind=answer.strip().lower()
+            if kind not in ('smapi','bepinex','melonloader','generic'):
+                messagebox.showwarning('Unsupported mod setup',
+                                       'No game was added. Choose a supported mod setup.',
+                                       parent=self)
+                return
+        game={'name':plan['name'],'root':plan['root'],'kind':kind}
+        self.data['games'].append(game)
+        cfg_save(self.data)
+        self.selected=len(self.data['games'])-1
+        self.unified_nexus={};self.unified_github={};self.nexus_results={}
+        self.fill_games()
+        self.show_page('Overview')
+        self.status.set(f"{plan['name']} added using the {kind.upper()} format. Existing mods were not changed.")
     def remove_game(self):
         if self.current() and messagebox.askyesno('Remove game','Remove this game from UniMod? Game files are not deleted.'):
             self.data['games'].pop(self.selected);self.selected=0 if self.data['games'] else None;self.unified_nexus={};self.unified_github={};self.nexus_results={};cfg_save(self.data);self.fill_games();self.refresh()
