@@ -17,6 +17,10 @@ UniMod is intended to make it easier to manage mods from different providers wit
 
 **Limits:** Not every game or mod format supports installation. Nexus account sign-in and protected downloads remain subject to official registration and account permissions. CurseForge downloading is not enabled. Mod.io download/update workflows have passed offline tests but have **not** been verified against a live user's account in this release.
 
+## One-click Check My Mods (v0.56 development)
+
+The top toolbar now includes **Check My Mods**. Select an installed game and click it to automatically rescan existing mods and summarise recognized folders, duplicate enabled SMAPI IDs, dependencies needing review and packages without reliable metadata. It uses UniMod's existing dependency/audit tools instead of introducing a second scanner. Buttons open **Installed Mods**, **Dependencies** (where supported), or **Installation Audit**. **Copy safe report** contains counts only—no local paths or private mod names. All checks are read-only; uncertain SMAPI built-in dependencies and DLL-based game formats are explicitly qualified. This UX improvement takes inspiration from the game-centric summaries in Prism/Vortex and CKAN-style dependency reviews; see [comparative research and roadmap](MOD-MANAGER-RESEARCH.md).
+
 ## Get started (Linux)
 
 Install Python 3.10+ and Tkinter using your distribution's package manager. Then run from the repository directory:
