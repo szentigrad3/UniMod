@@ -8055,25 +8055,127 @@ class App(tk.Tk):
         except Exception as e:messagebox.showerror('Update refused / failed',str(e))
 
     def restore_from_backup(self):
+        """A beginner-friendly chooser for existing, game-bound recovery backups.
+
+        The actual restoration remains in restore_backup(), which validates
+        game identity and retains the currently installed folder separately.
+        """
         game=self.current()
-        if not game:return
+        if not game:
+            messagebox.showinfo('Choose a game','Select the game you want to restore first.',parent=self)
+            return
         entries=backups_for_game(game)
         if not entries:
-            messagebox.showinfo('Backups','No recorded mod backups found for this game.');return
-        window=tk.Toplevel(self);window.title('Restore mod backup');window.geometry('780x360');window.transient(self)
-        ttk.Label(window,text='Select a backup to restore. The current mod will be retained separately.',wraplength=740).pack(padx=15,pady=12)
-        lb=tk.Listbox(window,exportselection=False);lb.pack(fill='both',expand=True,padx=15)
-        for e in entries:lb.insert('end',f"{e['saved_at']}   {e['mod_uid']}   {Path(e['original_path']).name}")
-        def do_restore():
-            selection=lb.curselection()
-            if not selection:return
-            entry=entries[selection[0]]
-            if not messagebox.askyesno('Confirm restoration',f"Restore {entry['mod_uid']} from backup?\nThe current folder will be preserved. Close the game first.",parent=window):return
+            messagebox.showinfo('No backups found',
+                                'There are no recorded restorable mod backups for this game. '
+                                'Backups are created when supported mods are updated.',
+                                parent=self)
+            return
+        root=str(Path(game['root']).resolve())
+        window=tk.Toplevel(self)
+        window.title('Restore a mod backup')
+        width=min(800,max(500,self.winfo_screenwidth()-80))
+        height=min(480,max(360,self.winfo_screenheight()-100))
+        window.geometry(f'{width}x{height}')
+        window.transient(self)
+        body=ttk.Frame(window,padding=(18,15));body.pack(fill='both',expand=True)
+        ttk.Label(body,text='Restore a previous mod version',
+                  style='Section.TLabel').pack(anchor='w',pady=(0,6))
+        ttk.Label(body,
+                  text=f"Game: {game['name']}. Choose a backup below. "
+                       "Restoring requires confirmation and the game must be closed. "
+                       "Your currently installed copy will be kept separately.",
+                  style='Subtle.TLabel',wraplength=730).pack(anchor='w',pady=(0,12))
+        area=ttk.Frame(body);area.pack(fill='both',expand=True)
+        backup_tree=ttk.Treeview(area,columns=('mod','version','date'),show='headings',
+                                selectmode='browse',height=8)
+        for column,label,width in (('mod','Mod',310),('version','Backup version',140),
+                                   ('date','Saved on',180)):
+            backup_tree.heading(column,text=label)
+            backup_tree.column(column,width=width,stretch=column=='mod')
+        backup_tree.pack(side='left',fill='both',expand=True)
+        scroll=ttk.Scrollbar(area,command=backup_tree.yview)
+        scroll.pack(side='right',fill='y');backup_tree.configure(yscrollcommand=scroll.set)
+        for idx,entry in enumerate(entries):
+            label=Path(entry['original_path']).name
+            version='Unknown'
             try:
-                old=restore_backup(game,entry);window.destroy();self.refresh()
-                messagebox.showinfo('Restored',f"Restored. Previous copy: {old or 'none'}")
-            except Exception as exc:messagebox.showerror('Restore failed',str(exc),parent=window)
-        ttk.Button(window,text='Restore selected backup',command=do_restore).pack(pady=12)
+                if game['kind']=='smapi':
+                    details=smapi_manifest(Path(entry['backup_path']))
+                    if details:
+                        label=str(details.get('name') or label)[:130]
+                        version=str(details.get('version') or 'Unknown')[:45]
+                else:
+                    details=_read_package_manifest(Path(entry['backup_path'])/'manifest.json')
+                    if details:
+                        label=str(details.get('name') or label)[:130]
+                        version=str(details.get('version') or 'Unknown')[:45]
+            except (OSError,ValueError,TypeError,KeyError):
+                pass
+            saved=str(entry.get('saved_at') or 'Unknown').replace('T',' ')[:19]
+            backup_tree.insert('','end',iid=str(idx),values=(label,version,saved))
+        note=tk.StringVar(value='Select a backup to enable Restore.')
+        ttk.Label(body,textvariable=note,style='Subtle.TLabel',
+                  wraplength=720).pack(anchor='w',pady=(10,5))
+        actions=ttk.Frame(body);actions.pack(fill='x',pady=(8,0))
+        restore_button=ttk.Button(actions,text='Restore selected backup',state='disabled',
+                                  style='Accent.TButton')
+        restore_button.pack(side='left')
+        ttk.Button(actions,text='Cancel',command=window.destroy).pack(side='right')
+        def selection_changed(*_):
+            selected=backup_tree.selection()
+            restore_button.configure(state='normal' if len(selected)==1 else 'disabled')
+            if selected:
+                values=backup_tree.item(selected[0],'values')
+                note.set(f"Selected: {values[0]}, backup version {values[1]}. "
+                         "The current mod is preserved separately when restoring.")
+        backup_tree.bind('<<TreeviewSelect>>',selection_changed)
+        def restore_selected():
+            selected=backup_tree.selection()
+            if len(selected)!=1:return
+            try:entry=entries[int(selected[0])]
+            except (IndexError,ValueError,TypeError):return
+            current=self.current()
+            if not current or str(Path(current['root']).resolve())!=root or current['kind']!=game['kind']:
+                messagebox.showwarning('Game changed',
+                                       'The selected game changed. Reopen Restore a backup for that game.',
+                                       parent=window)
+                return
+            # A backup may have moved or been consumed while this dialog was
+            # open; never restore using an old, unverified list entry.
+            still_there=any(
+                all(str(fresh.get(k))==str(entry.get(k)) for k in (
+                    'backup_path','original_path','game_root','mod_uid','saved_at'))
+                for fresh in backups_for_game(current))
+            if not still_there:
+                messagebox.showwarning('Backup changed',
+                                       'That backup is no longer available. Reopen the restore list.',
+                                       parent=window)
+                return
+            selected_label=backup_tree.item(selected[0],'values')[0]
+            if not messagebox.askyesno(
+                'Confirm mod restoration',
+                f"Restore {selected_label} for {game['name']}?\n\n"
+                "Close the game first. The currently installed version will be kept "
+                "in a separate recovery folder.\n\nContinue?",
+                parent=window):
+                return
+            try:
+                current=self.current()
+                if not current or str(Path(current['root']).resolve())!=root:
+                    raise ValueError('Game changed before restoration. No files were changed.')
+                old=restore_backup(current,entry)
+                window.destroy()
+                self.refresh()
+                self.status.set('Mod backup restored. Current version was preserved separately.')
+                messagebox.showinfo('Backup restored',
+                                    'The selected mod backup was restored. '
+                                    +('The previous installed copy was kept for recovery.' if old else
+                                      'No installed copy needed to be moved.'),
+                                    parent=self)
+            except Exception as exc:
+                messagebox.showerror('Restore not completed',str(exc),parent=window)
+        restore_button.configure(command=restore_selected)
 
     def selected_inventory_row(self):
         chosen=self.tree.selection()
