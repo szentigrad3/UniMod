@@ -3181,7 +3181,14 @@ class App(tk.Tk):
         self._nexus_batch_remaining=0
         self._nexus_cancel_event=None
         self.title('UniMod 0.55 test12 — Linux Mod Manager')
-        self.geometry('1500x900'); self.minsize(1024,640)
+        # Keep a window comfortably sized on 1080p and 4K; never launch maximized.
+        # Tk reports display dimensions in the current desktop's logical units.
+        screen_w=max(800,self.winfo_screenwidth())
+        screen_h=max(600,self.winfo_screenheight())
+        window_w=min(1360,max(880,int(screen_w*0.78)),max(700,screen_w-80))
+        window_h=min(820,max(600,int(screen_h*0.78)),max(500,screen_h-90))
+        self.geometry(f'{window_w}x{window_h}')
+        self.minsize(min(920,window_w),min(580,window_h))
         self.data=cfg_load(); self.selected=None; self.update_results={}; self.rows=[]; self.ts_results=[]; self.ts_filtered=[]; self.ts_loaded_community=None; self.ts_request_serial=0; self.nexus_results={}; self.nexus_running=False; self.nexus_oauth_tokens=None; self.nexus_checked=set(); self.inbox_results=[]; self.inbox_busy=False; self.family_rows={}; self.collapsed_families=set(); self.nexus_queue=NexusDownloadQueue(); self.unified_nexus={}; self.unified_github={}; self.unified_rows=[]; self.unified_running=False; self.unified_root=None; self._unified_events=queue.Queue(); self.unified_downloads=[]; self.unified_download_root=None; self.unified_download_busy=False; self.unified_install_busy=False
         style=ttk.Style(self)
         if 'clam' in style.theme_names(): style.theme_use('clam')
@@ -3207,77 +3214,108 @@ class App(tk.Tk):
         self.game_combo=ttk.Combobox(head,state='readonly',textvariable=self.game_combo_value,width=25,style='Top.TCombobox')
         self.game_combo.pack(side='left',padx=(0,14))
         self.game_combo.bind('<<ComboboxSelected>>',self.change_game_combo)
+        self.header_install=ttk.Button(head,text='Install ZIP…',command=self.install_archive,style='Top.TButton')
+        self.header_install.pack(side='left',padx=4)
         self.game_list=tk.Listbox(main,exportselection=False) # legacy selection API, hidden
-        self.profile_menu=ttk.Menubutton(head,text='Profile: Default  ▾',style='Top.TMenubutton')
-        self.profile_menu.pack(side='left',padx=(0,10))
+        # Keep the header minimal: game selection, adding a game and a single
+        # overflow menu. Existing backend actions remain available unchanged.
+        self.header_add_game=ttk.Button(head,text='+ Add game',command=self.add_game,style='Top.TButton')
+        self.header_add_game.pack(side='right',padx=(4,2))
+        self.more_button=ttk.Menubutton(head,text='More  ▾',style='Top.TMenubutton')
+        self.more_button.pack(side='right',padx=(4,10))
+        self.more_menu=tk.Menu(self.more_button,tearoff=False)
+        self.more_menu.add_command(label='Install a downloaded ZIP…',command=self.install_archive)
+        self.more_menu.add_command(label='Rescan selected game',command=self.refresh)
+        self.more_menu.add_command(label='Check My Mods',command=self.show_game_health)
+        self.more_menu.add_command(label='Check for updates',command=lambda:self.show_page('Updates Available'))
+        self.more_menu.add_separator()
+        self.more_menu.add_command(label='Find installed games',command=self.auto_detect)
+        # The legacy profile button object is retained for compatibility,
+        # but its actions live in More instead of crowding the top row.
+        self.profile_menu=ttk.Menubutton(head,text='Profiles',style='Top.TMenubutton')
         pm=tk.Menu(self.profile_menu,tearoff=False)
         pm.add_command(label='Save current profile…',command=self.save_profile)
         pm.add_command(label='Load profile…',command=self.load_profile)
         pm.add_command(label='Restore backup…',command=self.restore_from_backup)
         self.profile_menu.configure(menu=pm)
-        ttk.Button(head,text='+ Install ZIP',command=self.install_archive,style='Top.TButton').pack(side='left',padx=4)
-        ttk.Button(head,text='↻ Rescan',command=self.refresh,style='Top.TButton').pack(side='left',padx=4)
-        ttk.Button(head,text='Check My Mods',command=self.show_game_health,
-                   style='Top.TButton').pack(side='left',padx=4)
-        ttk.Button(head,text='Check updates',command=lambda:self.show_page('Updates Available'),style='Top.TButton').pack(side='left',padx=4)
-        ttk.Button(head,text='Scan games',command=self.auto_detect,style='Top.TButton').pack(side='right',padx=4)
-        ttk.Button(head,text='+ Add game',command=self.add_game,style='Top.TButton').pack(side='right',padx=4)
-        self.tools_button=ttk.Menubutton(head,text='Tools  ▾',style='Top.TMenubutton')
-        self.tools_button.pack(side='right',padx=10)
+        self.more_menu.add_cascade(label='Profiles and backups',menu=pm)
+        self.more_button.configure(menu=self.more_menu)
         body_shell=ttk.Frame(main);body_shell.pack(fill='both',expand=True)
-        rail=ttk.Frame(body_shell,style='Rail.TFrame',padding=(6,12));rail.pack(side='left',fill='y')
+        rail=ttk.Frame(body_shell,style='Rail.TFrame',padding=(10,14));rail.pack(side='left',fill='y')
+        ttk.Label(rail,text='NAVIGATION',style='TopMuted.TLabel').pack(anchor='w',pady=(2,12))
         self.primary_workspaces=(
             ('Mods','Installed Mods'),('Updates','Updates Available'),('Library','All Games & Mods'),
             ('Discover','Mod Websites'),('Downloads','Update Inbox'),('Overview','Overview'),
         )
-        # Buttons keep the icon navigation directly actionable. Tooltips give
-        # accessible full page labels without a permanently wide sidebar.
+        # Use readable labels rather than a mystery row of icons.
+        # Advanced tools remain in a separate menu.
         self.rail_buttons={}
-        for glyph,title,page in [('▤','Mods','Installed Mods'),('↻','Updates','Updates Available'),('▦','Library','All Games & Mods'),
-                                 ('⌕','Discover','Mod Websites'),('↓','Downloads','Update Inbox'),
-                                 ('◫','Overview','Overview')]:
-            button=ttk.Button(rail,text=glyph,width=3,style='Rail.TButton',
+        for glyph,title,page in [('⌂','Home','Overview'),('▤','My Mods','Installed Mods'),
+                                 ('⌕','Find Mods','Mod Websites'),('↻','Updates','Updates Available'),
+                                 ('↓','Downloads','Update Inbox'),('▦','All Games','All Games & Mods')]:
+            button=ttk.Button(rail,text=f'{glyph}  {title}',width=17,style='Rail.TButton',
                               command=lambda name=page:self.show_page(name))
             button.pack(fill='x',pady=(0,8),ipady=5)
             self.rail_buttons[page]=button
             self.attach_tooltip(button,title)
         ttk.Separator(rail).pack(fill='x',pady=12)
-        more=ttk.Button(rail,text='⚙',width=3,style='Rail.TButton',command=lambda:self.show_page('Profiles & Tools'))
-        more.pack(fill='x',ipady=5);self.attach_tooltip(more,'Advanced tools')
+        self.tools_button=ttk.Menubutton(rail,text='⚙  Advanced tools  ▾',width=20,
+                                         style='SideTool.TMenubutton')
+        self.tools_button.pack(fill='x',ipady=5)
+        self.attach_tooltip(self.tools_button,'Advanced features and troubleshooting')
         self.nav_list=tk.Listbox(main,exportselection=False) # legacy compatibility, hidden
         workspace=ttk.Frame(body_shell,style='TFrame');workspace.pack(side='left',fill='both',expand=True)
         self.tabs=ttk.Notebook(workspace,style='Sidebar.TNotebook');self.tabs.pack(fill='both',expand=True)
         self.tabs.bind('<<NotebookTabChanged>>',lambda e:self.sync_workspace())
         dashboard=ttk.Frame(self.tabs,padding=(24,20));self.tabs.add(dashboard,text='  Overview  ')
         overview_heading=ttk.Frame(dashboard);overview_heading.pack(fill='x',pady=(0,12))
-        ttk.Label(overview_heading,text='Library overview',style='Title.TLabel').pack(anchor='w')
+        ttk.Label(overview_heading,text='Welcome to UniMod',style='Title.TLabel').pack(anchor='w')
+        ttk.Label(overview_heading,text='Select a game, check its mods, and find new ones — without complicated setup.',
+                  style='Subtle.TLabel',wraplength=850).pack(anchor='w',pady=(4,0))
         self.overview_subtitle=tk.StringVar(value='Choose a game to inspect your mods.')
         ttk.Label(overview_heading,textvariable=self.overview_subtitle,style='Subtle.TLabel',wraplength=850).pack(anchor='w',pady=(4,0))
+        self.home_empty=ttk.Frame(dashboard)
+        ttk.Label(self.home_empty,text='Getting started',style='Section.TLabel').pack(anchor='w',pady=(0,6))
+        ttk.Label(self.home_empty,text='Already have games installed? UniMod can look for them. You can also add a game yourself.',
+                  style='Subtle.TLabel',wraplength=730).pack(anchor='w',pady=(0,10))
+        ttk.Button(self.home_empty,text='Find my installed games',command=self.auto_detect,
+                   style='Accent.TButton').pack(side='left',padx=(0,10))
+        ttk.Button(self.home_empty,text='Add a game manually',command=self.add_game).pack(side='left')
         # Focus the dashboard on three key numbers, not six giant metric cards.
         summary=ttk.Frame(dashboard);summary.pack(fill='x',pady=(0,8))
         for c in range(3):summary.columnconfigure(c,weight=1,uniform='metrics')
         self.stat_labels={}
-        for idx,label in enumerate(('Mod folders','Enabled folders','Known sources')):
+        for idx,(label,title) in enumerate((('Mod folders','Mods found'),
+                                             ('Enabled folders','Enabled'),
+                                             ('Known sources','Known downloads'))):
             panel=ttk.Frame(summary,style='Card.TFrame',padding=(18,12))
             panel.grid(row=0,column=idx,sticky='nsew',padx=(0,10))
-            ttk.Label(panel,text=label.upper(),style='CardCaption.TLabel').pack(anchor='w')
+            ttk.Label(panel,text=title.upper(),style='CardCaption.TLabel').pack(anchor='w')
             val=ttk.Label(panel,text='—',style='Metric.TLabel');val.pack(anchor='w',pady=(6,0))
             self.stat_labels[label]=val
-        secondary=ttk.Frame(dashboard);secondary.pack(fill='x',pady=(4,15))
+        # Preserve these diagnostics for existing internal callers, but do not
+        # put technical counters on the first screen.
+        secondary=ttk.Frame(dashboard)
         for label in ('Indexed IDs','Metadata pending','Audit warnings'):
             cell=ttk.Frame(secondary);cell.pack(side='left',padx=(0,25))
             ttk.Label(cell,text=label+': ',style='Subtle.TLabel').pack(side='left')
             val=ttk.Label(cell,text='—',style='Subtle.TLabel');val.pack(side='left')
             self.stat_labels[label]=val
         dash_actions=ttk.Frame(dashboard);dash_actions.pack(fill='x',pady=(0,15))
-        ttk.Button(dash_actions,text='Manage installed mods',command=lambda:self.tabs.select(1),
+        ttk.Button(dash_actions,text='1  My Mods',command=lambda:self.show_page('Installed Mods'),
                    style='Accent.TButton').pack(side='left',padx=(0,8))
-        ttk.Button(dash_actions,text='↻  Refresh inventory',command=self.refresh).pack(side='left')
+        ttk.Button(dash_actions,text='2  Find Mods',command=lambda:self.show_page('Mod Websites'),
+                   style='Accent.TButton').pack(side='left',padx=(0,8))
+        ttk.Button(dash_actions,text='3  Check My Mods',command=self.show_game_health,
+                   style='Accent.TButton').pack(side='left',padx=(0,8))
+        ttk.Label(dashboard,text='Viewing or checking mods never installs, deletes or changes your files.',
+                  style='Subtle.TLabel').pack(anchor='w',pady=(0,12))
         sub=ttk.Frame(dashboard);sub.pack(fill='x',pady=(0,8))
-        ttk.Label(sub,text='Installed packages',style='Section.TLabel').pack(side='left')
+        ttk.Label(sub,text='A look at your installed mods',style='Section.TLabel').pack(side='left')
         ttk.Label(sub,text='Read-only overview',style='Subtle.TLabel').pack(side='right')
         overview_area=ttk.Frame(dashboard);overview_area.pack(fill='both',expand=True)
-        self.overview_tree=ttk.Treeview(overview_area,columns=('name','type','count','enabled'),show='headings',selectmode='browse')
+        self.overview_tree=ttk.Treeview(overview_area,columns=('name','type','count','enabled'),
+                                        show='headings',selectmode='browse',height=7)
         for name,title,width in [('name','Mod / package',300),('type','Type',160),('count','DLLs',65),('enabled','State',115)]:
             self.overview_tree.heading(name,text=title)
             self.overview_tree.column(name,width=width,stretch=(name=='name'))
@@ -3829,7 +3867,10 @@ class App(tk.Tk):
         for label,_ in self.primary_workspaces:self.nav_list.insert('end',label)
         self.configure_tool_menu()
         self.fill_games();self.auto_detect(silent=True)
-        self.tabs.select(installed)
+        # With an empty library, autodetection does not call refresh(). Make
+        # sure first-run guidance still appears immediately on startup.
+        self.update_dashboard()
+        self.tabs.select(dashboard)
         self.sync_workspace()
         self.after(150,self.scan_global_library)
         if incoming_nxm is not None:
@@ -4080,8 +4121,8 @@ class App(tk.Tk):
         except tk.TclError:return
         for key,button in getattr(self,'rail_buttons',{}).items():
             button.configure(style='RailActive.TButton' if page==key else 'Rail.TButton')
-        if hasattr(self,'tools_button'):
-            self.tools_button.configure(text=('Tools  ▾' if page in self.rail_buttons else f'{page}  ▾'))
+        # Keep the advanced menu label stable; technical page names belong
+        # inside the menu, not in the primary navigation.
 
     def apply_theme(self, theme):
         """Refined native Tk theme; all graphics and styles independently authored."""
@@ -4125,8 +4166,8 @@ class App(tk.Tk):
         style.configure('Top.TButton',background=sidebar,foreground=fg,padding=(11,6),font=('DejaVu Sans',9))
         style.configure('Top.TMenubutton',background=sidebar,foreground=fg,padding=(8,6))
         style.configure('Top.TCombobox',fieldbackground=surface,foreground=fg,background=surface)
-        style.configure('Rail.TButton',background='#0c1524',foreground='#9eb0cc',padding=(7,10),font=('DejaVu Sans',15))
-        style.configure('RailActive.TButton',background='#29436b',foreground='#9fc4ff',padding=(7,10),font=('DejaVu Sans',15))
+        style.configure('Rail.TButton',background='#0c1524',foreground='#9eb0cc',padding=(7,10),font=('DejaVu Sans',11))
+        style.configure('RailActive.TButton',background='#29436b',foreground='#9fc4ff',padding=(7,10),font=('DejaVu Sans',11,'bold'))
         style.map('Rail.TButton',background=[('active','#1c304b')])
         style.map('RailActive.TButton',background=[('active','#315485')])
         style.map('TButton',background=[('active','#344964'),('pressed','#314b71')],foreground=[('disabled',muted_2)])
@@ -4211,7 +4252,12 @@ class App(tk.Tk):
         mods=self.rows if game else []
         packages=mod_packages(game,mods) if game else []
         health=existing_mod_health(game,mods) if game else {}
-        self.overview_subtitle.set((f"{game['name']}  ·  {game['kind'].upper()}  ·  {game['root']}" if game else 'Use Scan installed games or Add game to begin.'))
+        self.overview_subtitle.set((f"{game['name']}  ·  {game['kind'].upper()} mod format" if game else
+                                   'No game selected yet. Choose a game above to get started.'))
+        if game:
+            self.home_empty.pack_forget()
+        else:
+            self.home_empty.pack(fill='x',pady=(0,18),before=self.stat_labels['Mod folders'].master.master)
         for label,key in [('Mod folders','folders'),('Enabled folders','enabled_folders'),('Indexed IDs','mods'),('Metadata pending','unmanaged'),('Known sources','sources'),('Audit warnings','issues')]:
             self.stat_labels[label].configure(text=str(health[key]) if game else '—')
         self.overview_tree.delete(*self.overview_tree.get_children())
