@@ -3904,10 +3904,13 @@ class App(tk.Tk):
         updates=ttk.Frame(self.tabs,padding=(16,12));self.tabs.add(updates,text='  Updates Available  ')
         header=ttk.Frame(updates);header.pack(fill='x',pady=(0,8))
         ttk.Label(header,text='My Mod Updates',style='Title.TLabel').pack(side='left')
-        ttk.Button(header,text='Check for updates',command=self.unified_check,
+        ttk.Button(header,text='Check for updates',command=self.check_all_updates,
                    style='Accent.TButton').pack(side='right',padx=(8,0))
         self.unified_info=tk.StringVar(value='Choose a game, then check for updates. Nothing downloads or installs without approval.')
-        ttk.Label(updates,textvariable=self.unified_info,style='Subtle.TLabel',wraplength=1100).pack(anchor='w',pady=(0,9))
+        ttk.Label(updates,textvariable=self.unified_info,style='Subtle.TLabel',wraplength=1100).pack(anchor='w',pady=(0,6))
+        self.updates_guidance=tk.StringVar(value='Select your game, then Check for updates.')
+        ttk.Label(updates,textvariable=self.updates_guidance,style='Subtle.TLabel',
+                  wraplength=1000).pack(anchor='w',pady=(0,9))
         ubar=ttk.Frame(updates);ubar.pack(fill='x',pady=(0,8))
         ttk.Label(ubar,text='Find:').pack(side='left')
         self.unified_query=tk.StringVar(value='')
@@ -3915,7 +3918,7 @@ class App(tk.Tk):
         ttk.Entry(ubar,textvariable=self.unified_query,width=36).pack(side='left',padx=8,fill='x',expand=True)
         self.unified_filter=tk.StringVar(value='All')
         ttk.Combobox(ubar,textvariable=self.unified_filter,state='readonly',width=20,
-                     values=('All','Updates available','Not checked','Up to date','Needs attention')).pack(side='left',padx=(0,8))
+                     values=('All','Downloaded ZIP ready','Updates available','Not checked','Up to date','Needs attention')).pack(side='left',padx=(0,8))
         self.unified_filter.trace_add('write',lambda *_:self.unified_render())
         area=ttk.Frame(updates);area.pack(fill='both',expand=True)
         self.unified_tree=ttk.Treeview(area,columns=('name','installed','latest','source','status','parts','download'),show='headings',selectmode='extended')
@@ -3928,8 +3931,8 @@ class App(tk.Tk):
         self.unified_tree.bind('<Double-1>',lambda *_:self.unified_open_page())
         self.updates_actions=ttk.Frame(updates)
         self.updates_actions.pack(fill='x',pady=(10,0))
-        ttk.Button(self.updates_actions,text='Find downloaded updates',
-                   command=self.unified_scan_downloads,style='Accent.TButton').pack(side='left',padx=(0,8))
+        ttk.Button(self.updates_actions,text='Review ready updates…',
+                   command=self.unified_review_ready,style='Accent.TButton').pack(side='left',padx=(0,8))
         ttk.Button(self.updates_actions,text='Review selected update…',
                    command=self.unified_review_install).pack(side='left',padx=(0,8))
         ttk.Button(self.updates_actions,text='Restore a backup…',
@@ -3940,17 +3943,23 @@ class App(tk.Tk):
         self.update_tools_button.pack(side='right')
         self.updates_advanced=ttk.Frame(updates)
         more_main=ttk.Frame(self.updates_advanced);more_main.pack(fill='x',pady=(0,6))
+        ttk.Button(more_main,text='Find downloaded updates',
+                   command=self.unified_scan_downloads).pack(side='left',padx=(0,8))
         ttk.Button(more_main,text='Open mod page',command=self.unified_open_page).pack(side='left',padx=(0,8))
         ttk.Button(more_main,text='Choose Nexus file…',command=self.unified_choose_file).pack(side='left',padx=(0,8))
         ttk.Button(more_main,text='Select ready ZIPs',command=self.unified_select_ready).pack(side='left',padx=(0,8))
         ttk.Button(more_main,text='Review update batch…',command=self.unified_review_batch).pack(side='left')
         more_other=ttk.Frame(self.updates_advanced);more_other.pack(fill='x',pady=(0,6))
+        ttk.Button(more_other,text='Check online sources only',
+                   command=self.unified_check).pack(side='left',padx=(0,8))
         ttk.Button(more_other,text='Full update inbox',
                    command=lambda:self.show_page('Update Inbox')).pack(side='left',padx=(0,8))
         ttk.Button(more_other,text='Refresh installed mods',command=self.refresh).pack(side='left',padx=(0,8))
         ttk.Button(more_other,text='Match missing sources',
                    command=lambda:self.show_page('Source Matching')).pack(side='left')
         more_sources=ttk.Frame(self.updates_advanced);more_sources.pack(fill='x')
+        ttk.Button(more_sources,text='Choose ZIP folder…',
+                   command=self.inbox_browse).pack(side='left',padx=(0,8))
         ttk.Button(more_sources,text='Nexus account options',
                    command=lambda:self.show_page('Nexus Updates')).pack(side='left',padx=(0,8))
         self.unified_source_button=ttk.Button(more_sources,text='Resolve mod sources…',
@@ -4588,6 +4597,7 @@ class App(tk.Tk):
         matched=0
         for i,item in enumerate(self.unified_rows):
             status=item['status']
+            if mode=='Downloaded ZIP ready' and item.get('download_status')!='Ready for review':continue
             if mode=='Updates available' and status!='Update available':continue
             if mode=='Not checked' and status!='Not checked':continue
             if mode=='Up to date' and status not in ('Up to date','Local newer'):continue
@@ -4597,10 +4607,93 @@ class App(tk.Tk):
             matched+=1
         count=sum(r['status']=='Update available' for r in self.unified_rows)
         checked=sum(r['status'] in ('Update available','Up to date','Local newer','Version review') for r in self.unified_rows)
+        self.update_ready_guidance()
         if game:
             self.unified_info.set(f'{len(self.unified_rows)} distinct mod/source entries · {count} confirmed update(s) · {checked} version-checked · showing {matched}. '
                                   f'{sum(r["local_archive"] is not None for r in self.unified_rows)} downloaded update(s) ready for review. Unidentified mods are not assumed current.')
         else:self.unified_info.set('Select a game to review existing mods.')
+
+    def update_ready_guidance(self):
+        """Always distinguish local checked ZIPs from unverified online versions."""
+        if not hasattr(self,'updates_guidance'):return
+        game=self.current()
+        if not game:
+            self.updates_guidance.set('Select a game to check its mods.')
+            return
+        if self.unified_download_busy or self.unified_running:
+            self.updates_guidance.set('Checking mod sources and downloaded ZIPs. Nothing is being installed.')
+            return
+        visible=self.unified_tree.get_children('')
+        ready=[self.unified_rows[int(i)] for i in visible
+               if self.unified_rows[int(i)].get('download_status')=='Ready for review'
+               and self.unified_rows[int(i)].get('local_archive')]
+        if ready:
+            count=len(ready)
+            self.updates_guidance.set(
+                f'{count} exact downloaded update(s) ready for review in the current list. '
+                'Choose Review ready updates to inspect versions and dependencies before approving anything.')
+            return
+        known=sum(r['status']=='Update available' for r in self.unified_rows)
+        if known:
+            self.updates_guidance.set(
+                f'{known} online update(s) reported, but no matching newer ZIP is ready in this list. '
+                'Get the file from the official mod page, then Check for updates again.')
+        elif self.unified_rows:
+            self.updates_guidance.set(
+                'No verified newer ZIPs ready. Some mods may still need online checking '
+                'or an identified source; this does not mean they are up to date.')
+        else:
+            self.updates_guidance.set('No installed mods found for this game yet.')
+
+    def check_all_updates(self):
+        """One read-only action: local ZIP matching and supported online checks."""
+        game=self.current()
+        if not game:
+            messagebox.showinfo('Choose a game',
+                                'Select your game above, then check for updates.',
+                                parent=self)
+            return
+        if self.unified_install_busy or self.unified_download_busy or self.unified_running:
+            self.unified_info.set('A check or installation is already in progress. No changes were made.')
+            return
+        if game.get('kind') in ('smapi','bepinex'):
+            self.unified_scan_downloads(silent=True)
+        # Online lookup may be partial without a connected provider. Its
+        # results remain explicitly not checked rather than being invented.
+        self.unified_check()
+        self.update_ready_guidance()
+
+    def unified_review_ready(self):
+        """One safe next action for exact downloaded ZIPs currently visible."""
+        game=self.current()
+        if not game:
+            messagebox.showinfo('Choose a game','Select a game first.',parent=self)
+            return
+        if self.unified_download_busy or self.unified_running or self.unified_install_busy or self.inbox_busy:
+            messagebox.showinfo('Check still running',
+                                'Finish checking updates before reviewing an installation.',parent=self)
+            return
+        ready=[iid for iid in self.unified_tree.get_children('')
+               if self.unified_rows[int(iid)].get('download_status')=='Ready for review'
+               and self.unified_rows[int(iid)].get('local_archive')]
+        if not ready:
+            messagebox.showinfo(
+                'No downloaded updates ready',
+                'No uniquely matched newer ZIP is ready in the current list. '
+                'Use Check for updates or change the filter to All. '
+                'If you found an online update, download it from the official page first.',
+                parent=self)
+            return
+        if len(ready)>30:
+            messagebox.showinfo('Review updates in smaller groups',
+                                'More than 30 updates matched. Use More update options to '
+                                'select a smaller batch before reviewing.',parent=self)
+            return
+        self.unified_tree.selection_set(ready)
+        if len(ready)==1:
+            self.unified_review_install()
+        else:
+            self.unified_review_batch()
 
     def unified_scan_downloads(self, silent=False):
         game=self.current()

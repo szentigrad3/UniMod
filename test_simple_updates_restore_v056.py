@@ -11,6 +11,7 @@ class SimpleUpdatesTests(unittest.TestCase):
         start=source.index("updates=ttk.Frame(self.tabs,padding=(16,12))")
         end=source.index("# Update inbox: browser-downloaded archives",start)
         page=source[start:end]
+        self.assertIn('Review ready updates…',page)
         self.assertIn('Review selected update…',page)
         self.assertIn('Restore a backup…',page)
         self.assertIn('More update options  ▸',page)
