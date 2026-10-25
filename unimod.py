@@ -3082,6 +3082,45 @@ def restore_backup(game,entry):
         raise
     metadata=backup_root/(backup.name+'.unimod.json')
     if metadata.exists():metadata.unlink()
+    # Preserve the displaced installed version as a SELECTABLE backup, not
+    # merely an unexplained recovery folder. Only register a copy whose exact
+    # package identity matches the restored mod. Restore succeeded even if
+    # optional history registration fails: never retry file moves implicitly.
+    if previous and previous.is_dir():
+        try:
+            if game['kind']=='smapi':
+                installed_info=smapi_manifest(previous)
+                matches=bool(installed_info and
+                             installed_info['uid'].casefold()==str(entry['mod_uid']).casefold())
+            else:
+                installed_info=_read_package_manifest(previous/'manifest.json')
+                matches=bool(installed_info and installed_info['identity']==entry['mod_uid'])
+            if matches:
+                new_entry={'game_root':str(Path(game['root']).resolve()),
+                           'mod_uid':str(entry['mod_uid']),
+                           'original_path':str(original),
+                           'backup_path':str(previous),
+                           'saved_at':datetime.datetime.now().isoformat(),
+                           'kind':game['kind']}
+                new_meta=previous.with_name(previous.name+'.unimod.json')
+                temporary=None
+                try:
+                    with tempfile.NamedTemporaryFile(
+                            mode='w',encoding='utf-8',dir=backup_root,
+                            prefix='.unimod-restore-',suffix='.tmp',delete=False) as out:
+                        temporary=Path(out.name)
+                        json.dump(new_entry,out,indent=2)
+                        out.write('\\n')
+                        out.flush()
+                        os.fsync(out.fileno())
+                    temporary.replace(new_meta)
+                finally:
+                    if temporary:temporary.unlink(missing_ok=True)
+        except (OSError,ValueError,TypeError,KeyError):
+            # The prior version still exists in the recovery folder. An
+            # inability to write history must not roll back an already
+            # successful restore.
+            pass
     return previous
 
 def download(url,target):
