@@ -11,6 +11,7 @@ import modio_diagnostics
 import modio_files
 import modio_live_probe
 import modio_selftest
+import modio_keyonly
 import provider_catalogues as catalogue
 
 RESULTS = ('Passed', 'Failed', 'Not tested')
@@ -50,21 +51,30 @@ def run_aio(game, *, game_id='', user_id='', api_key='', mod_id='',
     if not isinstance(game, dict) or game.get('kind') not in ('smapi', 'bepinex') or not _normal(game.get('name')):
         report['reason'] = 'choose_game'
         return report
-    if (not isinstance(game_id, str) or not isinstance(user_id, str) or
-            not re.fullmatch(r'[1-9][0-9]{0,11}', game_id) or
-            not re.fullmatch(r'[1-9][0-9]{0,11}', user_id) or
-            not isinstance(api_key, str) or len(api_key.strip()) < 8):
+    if not isinstance(api_key,str) or len(api_key.strip()) < 8:
         report['reason'] = 'connect'
         return report
-
+    legacy = (isinstance(game_id,str) and isinstance(user_id,str) and
+              re.fullmatch(r'[1-9][0-9]{0,11}',game_id) and
+              re.fullmatch(r'[1-9][0-9]{0,11}',user_id))
     _emit(progress, 'game')
     try:
-        record = catalogue.modio_game(game_id, api_key, user_id=user_id, fetch=fetch)
-        if _normal(record.get('name')) != _normal(game['name']):
-            report['game'] = 'Failed'
-            report['reason'] = 'wrong_game'
-            return report
+        if legacy:
+            record = catalogue.modio_game(game_id, api_key, user_id=user_id, fetch=fetch)
+            if _normal(record.get('name')) != _normal(game['name']):
+                report['game'] = 'Failed'
+                report['reason'] = 'wrong_game'
+                return report
+        else:
+            # The key cannot reveal the owner's user ID. Resolve an exact
+            # public game name; never guess a game from the API key.
+            game_id = modio_keyonly.resolve_game(game, api_key, fetch=fetch)
+            user_id = None  # Public key-only GET route, not /me.
         report['game'] = 'Passed'
+    except modio_keyonly.ResolutionError as exc:
+        report['game'] = 'Failed'
+        report['reason'] = str(exc) if str(exc) in HELP else 'game_api'
+        return report
     except Exception:
         report['game'] = 'Failed'
         report['reason'] = 'game_api'
@@ -147,7 +157,10 @@ def run_aio(game, *, game_id='', user_id='', api_key='', mod_id='',
 HELP = {
     'none': 'Ready.',
     'choose_game': 'Choose a supported game in UniMod, then run the test again.',
-    'connect': 'Enter your mod.io Game ID, API-path User ID and private key once.',
+    'connect': 'Enter your private mod.io API key. Game selection is taken from UniMod.',
+    'key_path_required': 'This key needs its unique mod.io API path. Key-only access was not accepted; no account ID was guessed.',
+    'game_not_found': 'The selected game could not be matched exactly in mod.io’s public catalogue.',
+    'ambiguous_game': 'Multiple or incomplete game matches: choose an unambiguous supported game before testing.',
     'wrong_game': 'The mod.io game does not match your selected installed game.',
     'game_api': 'Game verification failed. Check your connection and credentials.',
     'choose_mod': 'Select a mod, or approve an automatic public ZIP test.',
