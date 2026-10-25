@@ -38,7 +38,7 @@ class ReversibleRestoreTests(unittest.TestCase):
         self.assertEqual(len(first),1)
         self.assertEqual(first[0]['mod_uid'],'test.example')
 
-        prior=unimod.restore_backup(self.game,first[0])
+        prior=unimod.restore_backup(self.game,first[0],record_displaced=True)
         self.assertTrue(prior.is_dir())
         self.assertEqual(self.installed_version(),'1.0')
         to_redo=unimod.backups_for_game(self.game)
@@ -52,7 +52,7 @@ class ReversibleRestoreTests(unittest.TestCase):
         self.assertEqual(unimod.smapi_manifest(prior)['version'],'2.0')
 
         # The recorded displaced version is valid input to existing restore.
-        unimod.restore_backup(self.game,to_redo[0])
+        unimod.restore_backup(self.game,to_redo[0],record_displaced=True)
         self.assertEqual(self.installed_version(),'2.0')
         self.assertEqual(len(unimod.backups_for_game(self.game)),1)
         self.assertEqual(unimod.smapi_manifest(
@@ -63,7 +63,7 @@ class ReversibleRestoreTests(unittest.TestCase):
         current=json.loads((self.folder/'manifest.json').read_text())
         current['UniqueID']='different.package'
         (self.folder/'manifest.json').write_text(json.dumps(current))
-        prior=unimod.restore_backup(self.game,unimod.backups_for_game(self.game)[0])
+        prior=unimod.restore_backup(self.game,unimod.backups_for_game(self.game)[0],record_displaced=True)
         self.assertTrue(prior.is_dir())
         self.assertEqual(self.installed_version(),'1.0')
         self.assertEqual(unimod.backups_for_game(self.game),[])
@@ -71,12 +71,12 @@ class ReversibleRestoreTests(unittest.TestCase):
 
     def test_unrelated_game_cannot_use_registered_reversal(self):
         unimod.apply_downloaded_update(self.game,self.match)
-        unimod.restore_backup(self.game,unimod.backups_for_game(self.game)[0])
+        unimod.restore_backup(self.game,unimod.backups_for_game(self.game)[0],record_displaced=True)
         entry=unimod.backups_for_game(self.game)[0]
         wrong={**self.game,'root':str(self.base/'Another Game')}
         self.assertEqual(unimod.backups_for_game(wrong),[])
         with self.assertRaisesRegex(ValueError,'different game'):
-            unimod.restore_backup(wrong,entry)
+            unimod.restore_backup(wrong,entry,record_displaced=True)
 
 
 if __name__=='__main__':
