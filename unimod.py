@@ -3412,22 +3412,22 @@ class App(tk.Tk):
         provider_group=ttk.Frame(downloads_home,style='Card.TFrame',padding=(20,18))
         provider_group.pack(fill='x',pady=(0,12))
         ttk.Label(provider_group,text='From mod websites in UniMod',
-                  style='Section.TLabel').pack(anchor='w',pady=(0,6))
+                  style='CardHeading.TLabel').pack(anchor='w',pady=(0,6))
         ttk.Label(provider_group,text='Downloaded releases from supported providers. Review the file and game compatibility first.',
-                  style='Subtle.TLabel',wraplength=800).pack(anchor='w',pady=(0,8))
+                  style='Muted.TLabel',wraplength=800).pack(anchor='w',pady=(0,8))
         self.downloads_provider_summary=tk.StringVar(value='Checking downloaded files…')
         ttk.Label(provider_group,textvariable=self.downloads_provider_summary,
-                  style='Subtle.TLabel').pack(anchor='w',pady=(0,10))
+                  style='Muted.TLabel').pack(anchor='w',pady=(0,10))
         ttk.Button(provider_group,text='Review provider downloads',
                    command=self.provider_review_downloads,style='Accent.TButton').pack(anchor='w')
         nexus_group=ttk.Frame(downloads_home,style='Card.TFrame',padding=(20,18))
         nexus_group.pack(fill='x',pady=(0,12))
         ttk.Label(nexus_group,text='Nexus links and downloaded ZIP updates',
-                  style='Section.TLabel').pack(anchor='w',pady=(0,6))
+                  style='CardHeading.TLabel').pack(anchor='w',pady=(0,6))
         ttk.Label(nexus_group,
                   text='Review Nexus download requests or scan ZIP updates from your Downloads folder. '
                        'Existing mods are not replaced without a separate approval.',
-                  style='Subtle.TLabel',wraplength=800).pack(anchor='w',pady=(0,10))
+                  style='Muted.TLabel',wraplength=800).pack(anchor='w',pady=(0,10))
         ttk.Button(nexus_group,text='Review Nexus / ZIP downloads',
                    command=lambda:self.show_page('Update Inbox')).pack(anchor='w')
         ttk.Label(downloads_home,
@@ -4232,6 +4232,7 @@ class App(tk.Tk):
         style.configure('Muted.TLabel',background=panel,foreground=muted,font=('DejaVu Sans',10))
         style.configure('Metric.TLabel',background=panel,foreground=accent,font=('DejaVu Sans',27,'bold'))
         style.configure('CardCaption.TLabel',background=panel,foreground=muted,font=('DejaVu Sans',9,'bold'))
+        style.configure('CardHeading.TLabel',background=panel,foreground=fg,font=('DejaVu Sans',12,'bold'))
         style.configure('BrandIcon.TLabel',background=sidebar,foreground=accent,font=('DejaVu Sans',25,'bold'))
         style.configure('Brand.TLabel',background=sidebar,foreground=fg,font=('DejaVu Sans',13,'bold'))
         style.configure('TopMuted.TLabel',background=sidebar,foreground=muted,font=('DejaVu Sans',8,'bold'))
