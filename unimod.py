@@ -3214,6 +3214,8 @@ class App(tk.Tk):
         self.game_combo=ttk.Combobox(head,state='readonly',textvariable=self.game_combo_value,width=25,style='Top.TCombobox')
         self.game_combo.pack(side='left',padx=(0,14))
         self.game_combo.bind('<<ComboboxSelected>>',self.change_game_combo)
+        self.header_install=ttk.Button(head,text='Install ZIP…',command=self.install_archive,style='Top.TButton')
+        self.header_install.pack(side='left',padx=4)
         self.game_list=tk.Listbox(main,exportselection=False) # legacy selection API, hidden
         # Keep the header minimal: game selection, adding a game and a single
         # overflow menu. Existing backend actions remain available unchanged.
