@@ -55,7 +55,7 @@ class NoOffsiteRedirect(urllib.request.HTTPRedirectHandler):
 def fetch_json(url, *, headers=None, fetch=None, limit=MAX_RESPONSE):
     """Safe JSON read; injected fetch(url, headers) makes offline testing possible."""
     parsed=urllib.parse.urlsplit(url)
-    allowed={'api.github.com', 'api.modrinth.com', 'thunderstore.io', 'api.curseforge.com'}
+    allowed={'api.github.com', 'api.modrinth.com', 'thunderstore.io', 'api.curseforge.com', 'api.mod.io'}
     if parsed.hostname not in allowed and not re.fullmatch(r'[gu]-[1-9]\d{0,11}\.modapi\.io', parsed.hostname or ''):
         raise ProviderError('Unapproved provider API host.')
     if parsed.scheme!='https' or parsed.username or parsed.password or parsed.port not in (None, 443) or parsed.fragment:
