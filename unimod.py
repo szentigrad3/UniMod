@@ -3864,11 +3864,9 @@ class App(tk.Tk):
         # One simple review-first updates page. Never issues API requests on load.
         updates=ttk.Frame(self.tabs,padding=(16,12));self.tabs.add(updates,text='  Updates Available  ')
         header=ttk.Frame(updates);header.pack(fill='x',pady=(0,8))
-        ttk.Label(header,text='Updates for your installed mods',style='Title.TLabel').pack(side='left')
-        ttk.Button(header,text='Check connected sources',command=self.unified_check,style='Accent.TButton').pack(side='right',padx=(8,0))
-        ttk.Button(header,text='Refresh inventory',command=self.refresh).pack(side='right')
-        self.unified_source_button=ttk.Button(header,text='Resolve mod sources…',command=self.unified_identify_sources)
-        self.unified_source_button.pack(side='right',padx=(0,8))
+        ttk.Label(header,text='My Mod Updates',style='Title.TLabel').pack(side='left')
+        ttk.Button(header,text='Check for updates',command=self.unified_check,
+                   style='Accent.TButton').pack(side='right',padx=(8,0))
         self.unified_info=tk.StringVar(value='Choose a game, then check for updates. Nothing downloads or installs without approval.')
         ttk.Label(updates,textvariable=self.unified_info,style='Subtle.TLabel',wraplength=1100).pack(anchor='w',pady=(0,9))
         ubar=ttk.Frame(updates);ubar.pack(fill='x',pady=(0,8))
@@ -3880,7 +3878,6 @@ class App(tk.Tk):
         ttk.Combobox(ubar,textvariable=self.unified_filter,state='readonly',width=20,
                      values=('All','Updates available','Not checked','Up to date','Needs attention')).pack(side='left',padx=(0,8))
         self.unified_filter.trace_add('write',lambda *_:self.unified_render())
-        ttk.Button(ubar,text='Nexus account / developer options',command=lambda:self.show_page('Nexus Updates')).pack(side='right')
         area=ttk.Frame(updates);area.pack(fill='both',expand=True)
         self.unified_tree=ttk.Treeview(area,columns=('name','installed','latest','source','status','parts','download'),show='headings',selectmode='extended')
         for field,label,width in (('name','Mod / family',320),('installed','Installed',100),('latest','Latest checked',120),('source','Source',100),('status','Result',165),('parts','Parts',70),('download','Downloaded ZIP',185)):
@@ -3890,16 +3887,38 @@ class App(tk.Tk):
         scrollbar=ttk.Scrollbar(area,command=self.unified_tree.yview);scrollbar.pack(side='right',fill='y')
         self.unified_tree.configure(yscrollcommand=scrollbar.set)
         self.unified_tree.bind('<Double-1>',lambda *_:self.unified_open_page())
-        actions=ttk.Frame(updates);actions.pack(fill='x',pady=(10,0))
-        ttk.Button(actions,text='Open selected mod page',command=self.unified_open_page).pack(side='left',padx=(0,7))
-        ttk.Button(actions,text='Choose Nexus file…',command=self.unified_choose_file).pack(side='left',padx=(0,7))
-        ttk.Button(actions,text='Find downloaded updates',command=self.unified_scan_downloads,style='Accent.TButton').pack(side='left',padx=(0,7))
-        ttk.Button(actions,text='Review & Install selected…',command=self.unified_review_install).pack(side='left',padx=(0,7))
-        ttk.Button(actions,text='Select ready ZIPs',command=self.unified_select_ready).pack(side='left',padx=(0,7))
-        ttk.Button(actions,text='Review & Install batch…',command=self.unified_review_batch,style='Accent.TButton').pack(side='left',padx=(0,7))
-        ttk.Button(actions,text='Open full Update Inbox',command=lambda:self.show_page('Update Inbox')).pack(side='left',padx=(0,7))
-        ttk.Button(actions,text='Resolve missing sources',command=lambda:self.show_page('Source Matching')).pack(side='right')
-        ttk.Label(updates,text='Updates are based on confirmed version responses only. Downloads go into the review queue; no automatic installations.',style='Subtle.TLabel').pack(anchor='w',pady=(9,0))
+        self.updates_actions=ttk.Frame(updates)
+        self.updates_actions.pack(fill='x',pady=(10,0))
+        ttk.Button(self.updates_actions,text='Find downloaded updates',
+                   command=self.unified_scan_downloads,style='Accent.TButton').pack(side='left',padx=(0,8))
+        ttk.Button(self.updates_actions,text='Review selected update…',
+                   command=self.unified_review_install).pack(side='left',padx=(0,8))
+        ttk.Button(self.updates_actions,text='Restore a backup…',
+                   command=self.restore_from_backup).pack(side='left',padx=(0,8))
+        self.update_tools_button=ttk.Button(
+            self.updates_actions,text='More update options  ▸',
+            command=self.toggle_update_tools)
+        self.update_tools_button.pack(side='right')
+        self.updates_advanced=ttk.Frame(updates)
+        more_main=ttk.Frame(self.updates_advanced);more_main.pack(fill='x',pady=(0,6))
+        ttk.Button(more_main,text='Open mod page',command=self.unified_open_page).pack(side='left',padx=(0,8))
+        ttk.Button(more_main,text='Choose Nexus file…',command=self.unified_choose_file).pack(side='left',padx=(0,8))
+        ttk.Button(more_main,text='Select ready ZIPs',command=self.unified_select_ready).pack(side='left',padx=(0,8))
+        ttk.Button(more_main,text='Review update batch…',command=self.unified_review_batch).pack(side='left')
+        more_other=ttk.Frame(self.updates_advanced);more_other.pack(fill='x',pady=(0,6))
+        ttk.Button(more_other,text='Full update inbox',
+                   command=lambda:self.show_page('Update Inbox')).pack(side='left',padx=(0,8))
+        ttk.Button(more_other,text='Refresh installed mods',command=self.refresh).pack(side='left',padx=(0,8))
+        ttk.Button(more_other,text='Match missing sources',
+                   command=lambda:self.show_page('Source Matching')).pack(side='left')
+        more_sources=ttk.Frame(self.updates_advanced);more_sources.pack(fill='x')
+        ttk.Button(more_sources,text='Nexus account options',
+                   command=lambda:self.show_page('Nexus Updates')).pack(side='left',padx=(0,8))
+        self.unified_source_button=ttk.Button(more_sources,text='Resolve mod sources…',
+                                               command=self.unified_identify_sources)
+        self.unified_source_button.pack(side='left')
+        ttk.Label(updates,text='Version checks do not install anything. Updates always require review and confirmation.',
+                  style='Subtle.TLabel').pack(anchor='w',pady=(9,0))
         # Update inbox: browser-downloaded archives matched against existing SMAPI IDs.
         inbox=ttk.Frame(self.tabs,padding=12);self.tabs.add(inbox,text='  Update Inbox  ');self.inbox_tab=inbox
         ttk.Label(inbox,text='Nexus download queue',style='Section.TLabel').pack(anchor='w',pady=(0,5))
@@ -4612,6 +4631,15 @@ class App(tk.Tk):
             self._unified_events.put(('batch_installed',root,(result,error)))
         threading.Thread(target=worker,daemon=True).start()
         self.after(70,self._poll_unified_events)
+
+    def toggle_update_tools(self):
+        """Show optional batch, provider and technical controls on demand."""
+        if self.updates_advanced.winfo_manager():
+            self.updates_advanced.pack_forget()
+            self.update_tools_button.configure(text='More update options  ▸')
+        else:
+            self.updates_advanced.pack(fill='x',after=self.updates_actions,pady=(8,0))
+            self.update_tools_button.configure(text='Fewer options  ▴')
 
     def unified_review_install(self):
         game=self.current();row=self.unified_picked()
@@ -8028,25 +8056,127 @@ class App(tk.Tk):
         except Exception as e:messagebox.showerror('Update refused / failed',str(e))
 
     def restore_from_backup(self):
+        """A beginner-friendly chooser for existing, game-bound recovery backups.
+
+        The actual restoration remains in restore_backup(), which validates
+        game identity and retains the currently installed folder separately.
+        """
         game=self.current()
-        if not game:return
+        if not game:
+            messagebox.showinfo('Choose a game','Select the game you want to restore first.',parent=self)
+            return
         entries=backups_for_game(game)
         if not entries:
-            messagebox.showinfo('Backups','No recorded mod backups found for this game.');return
-        window=tk.Toplevel(self);window.title('Restore mod backup');window.geometry('780x360');window.transient(self)
-        ttk.Label(window,text='Select a backup to restore. The current mod will be retained separately.',wraplength=740).pack(padx=15,pady=12)
-        lb=tk.Listbox(window,exportselection=False);lb.pack(fill='both',expand=True,padx=15)
-        for e in entries:lb.insert('end',f"{e['saved_at']}   {e['mod_uid']}   {Path(e['original_path']).name}")
-        def do_restore():
-            selection=lb.curselection()
-            if not selection:return
-            entry=entries[selection[0]]
-            if not messagebox.askyesno('Confirm restoration',f"Restore {entry['mod_uid']} from backup?\nThe current folder will be preserved. Close the game first.",parent=window):return
+            messagebox.showinfo('No backups found',
+                                'There are no recorded restorable mod backups for this game. '
+                                'Backups are created when supported mods are updated.',
+                                parent=self)
+            return
+        root=str(Path(game['root']).resolve())
+        window=tk.Toplevel(self)
+        window.title('Restore a mod backup')
+        width=min(800,max(500,self.winfo_screenwidth()-80))
+        height=min(480,max(360,self.winfo_screenheight()-100))
+        window.geometry(f'{width}x{height}')
+        window.transient(self)
+        body=ttk.Frame(window,padding=(18,15));body.pack(fill='both',expand=True)
+        ttk.Label(body,text='Restore a previous mod version',
+                  style='Section.TLabel').pack(anchor='w',pady=(0,6))
+        ttk.Label(body,
+                  text=f"Game: {game['name']}. Choose a backup below. "
+                       "Restoring requires confirmation and the game must be closed. "
+                       "Your currently installed copy will be kept separately.",
+                  style='Subtle.TLabel',wraplength=730).pack(anchor='w',pady=(0,12))
+        area=ttk.Frame(body);area.pack(fill='both',expand=True)
+        backup_tree=ttk.Treeview(area,columns=('mod','version','date'),show='headings',
+                                selectmode='browse',height=8)
+        for column,label,width in (('mod','Mod',310),('version','Backup version',140),
+                                   ('date','Saved on',180)):
+            backup_tree.heading(column,text=label)
+            backup_tree.column(column,width=width,stretch=column=='mod')
+        backup_tree.pack(side='left',fill='both',expand=True)
+        scroll=ttk.Scrollbar(area,command=backup_tree.yview)
+        scroll.pack(side='right',fill='y');backup_tree.configure(yscrollcommand=scroll.set)
+        for idx,entry in enumerate(entries):
+            label=Path(entry['original_path']).name
+            version='Unknown'
             try:
-                old=restore_backup(game,entry);window.destroy();self.refresh()
-                messagebox.showinfo('Restored',f"Restored. Previous copy: {old or 'none'}")
-            except Exception as exc:messagebox.showerror('Restore failed',str(exc),parent=window)
-        ttk.Button(window,text='Restore selected backup',command=do_restore).pack(pady=12)
+                if game['kind']=='smapi':
+                    details=smapi_manifest(Path(entry['backup_path']))
+                    if details:
+                        label=str(details.get('name') or label)[:130]
+                        version=str(details.get('version') or 'Unknown')[:45]
+                else:
+                    details=_read_package_manifest(Path(entry['backup_path'])/'manifest.json')
+                    if details:
+                        label=str(details.get('name') or label)[:130]
+                        version=str(details.get('version') or 'Unknown')[:45]
+            except (OSError,ValueError,TypeError,KeyError):
+                pass
+            saved=str(entry.get('saved_at') or 'Unknown').replace('T',' ')[:19]
+            backup_tree.insert('','end',iid=str(idx),values=(label,version,saved))
+        note=tk.StringVar(value='Select a backup to enable Restore.')
+        ttk.Label(body,textvariable=note,style='Subtle.TLabel',
+                  wraplength=720).pack(anchor='w',pady=(10,5))
+        actions=ttk.Frame(body);actions.pack(fill='x',pady=(8,0))
+        restore_button=ttk.Button(actions,text='Restore selected backup',state='disabled',
+                                  style='Accent.TButton')
+        restore_button.pack(side='left')
+        ttk.Button(actions,text='Cancel',command=window.destroy).pack(side='right')
+        def selection_changed(*_):
+            selected=backup_tree.selection()
+            restore_button.configure(state='normal' if len(selected)==1 else 'disabled')
+            if selected:
+                values=backup_tree.item(selected[0],'values')
+                note.set(f"Selected: {values[0]}, backup version {values[1]}. "
+                         "The current mod is preserved separately when restoring.")
+        backup_tree.bind('<<TreeviewSelect>>',selection_changed)
+        def restore_selected():
+            selected=backup_tree.selection()
+            if len(selected)!=1:return
+            try:entry=entries[int(selected[0])]
+            except (IndexError,ValueError,TypeError):return
+            current=self.current()
+            if not current or str(Path(current['root']).resolve())!=root or current['kind']!=game['kind']:
+                messagebox.showwarning('Game changed',
+                                       'The selected game changed. Reopen Restore a backup for that game.',
+                                       parent=window)
+                return
+            # A backup may have moved or been consumed while this dialog was
+            # open; never restore using an old, unverified list entry.
+            still_there=any(
+                all(str(fresh.get(k))==str(entry.get(k)) for k in (
+                    'backup_path','original_path','game_root','mod_uid','saved_at'))
+                for fresh in backups_for_game(current))
+            if not still_there:
+                messagebox.showwarning('Backup changed',
+                                       'That backup is no longer available. Reopen the restore list.',
+                                       parent=window)
+                return
+            selected_label=backup_tree.item(selected[0],'values')[0]
+            if not messagebox.askyesno(
+                'Confirm mod restoration',
+                f"Restore {selected_label} for {game['name']}?\n\n"
+                "Close the game first. The currently installed version will be kept "
+                "in a separate recovery folder.\n\nContinue?",
+                parent=window):
+                return
+            try:
+                current=self.current()
+                if not current or str(Path(current['root']).resolve())!=root:
+                    raise ValueError('Game changed before restoration. No files were changed.')
+                old=restore_backup(current,entry)
+                window.destroy()
+                self.refresh()
+                self.status.set('Mod backup restored. Current version was preserved separately.')
+                messagebox.showinfo('Backup restored',
+                                    'The selected mod backup was restored. '
+                                    +('The previous installed copy was kept for recovery.' if old else
+                                      'No installed copy needed to be moved.'),
+                                    parent=self)
+            except Exception as exc:
+                messagebox.showerror('Restore not completed',str(exc),parent=window)
+        restore_button.configure(command=restore_selected)
 
     def selected_inventory_row(self):
         chosen=self.tree.selection()
