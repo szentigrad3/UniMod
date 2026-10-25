@@ -49,3 +49,4 @@ jobs:
           xvfb-run -a .buildvenv/bin/python gui_beginner_add_game_smoke_v056.py
           xvfb-run -a .buildvenv/bin/python gui_guided_discover_smoke_v056.py
           xvfb-run -a .buildvenv/bin/python gui_downloads_home_smoke_v056.py
+          xvfb-run -a .buildvenv/bin/python gui_guided_install_smoke_v056.py
