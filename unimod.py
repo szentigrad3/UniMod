@@ -3225,7 +3225,8 @@ class App(tk.Tk):
         self.tools_button=ttk.Menubutton(head,text='Tools  ▾',style='Top.TMenubutton')
         self.tools_button.pack(side='right',padx=10)
         body_shell=ttk.Frame(main);body_shell.pack(fill='both',expand=True)
-        rail=ttk.Frame(body_shell,style='Rail.TFrame',padding=(6,12));rail.pack(side='left',fill='y')
+        rail=ttk.Frame(body_shell,style='Rail.TFrame',padding=(10,14));rail.pack(side='left',fill='y')
+        ttk.Label(rail,text='NAVIGATION',style='TopMuted.TLabel').pack(anchor='w',pady=(2,12))
         self.primary_workspaces=(
             ('Mods','Installed Mods'),('Updates','Updates Available'),('Library','All Games & Mods'),
             ('Discover','Mod Websites'),('Downloads','Update Inbox'),('Overview','Overview'),
@@ -3233,16 +3234,16 @@ class App(tk.Tk):
         # Buttons keep the icon navigation directly actionable. Tooltips give
         # accessible full page labels without a permanently wide sidebar.
         self.rail_buttons={}
-        for glyph,title,page in [('▤','Mods','Installed Mods'),('↻','Updates','Updates Available'),('▦','Library','All Games & Mods'),
-                                 ('⌕','Discover','Mod Websites'),('↓','Downloads','Update Inbox'),
-                                 ('◫','Overview','Overview')]:
-            button=ttk.Button(rail,text=glyph,width=3,style='Rail.TButton',
+        for glyph,title,page in [('⌂','Home','Overview'),('▤','My Mods','Installed Mods'),
+                                 ('⌕','Find Mods','Mod Websites'),('↻','Updates','Updates Available'),
+                                 ('↓','Downloads','Update Inbox'),('▦','All Games','All Games & Mods')]:
+            button=ttk.Button(rail,text=f'{glyph}  {title}',width=17,style='Rail.TButton',
                               command=lambda name=page:self.show_page(name))
             button.pack(fill='x',pady=(0,8),ipady=5)
             self.rail_buttons[page]=button
             self.attach_tooltip(button,title)
         ttk.Separator(rail).pack(fill='x',pady=12)
-        more=ttk.Button(rail,text='⚙',width=3,style='Rail.TButton',command=lambda:self.show_page('Profiles & Tools'))
+        more=ttk.Button(rail,text='⚙  Advanced tools',width=17,style='Rail.TButton',command=lambda:self.show_page('Profiles & Tools'))
         more.pack(fill='x',ipady=5);self.attach_tooltip(more,'Advanced tools')
         self.nav_list=tk.Listbox(main,exportselection=False) # legacy compatibility, hidden
         workspace=ttk.Frame(body_shell,style='TFrame');workspace.pack(side='left',fill='both',expand=True)
@@ -3250,7 +3251,9 @@ class App(tk.Tk):
         self.tabs.bind('<<NotebookTabChanged>>',lambda e:self.sync_workspace())
         dashboard=ttk.Frame(self.tabs,padding=(24,20));self.tabs.add(dashboard,text='  Overview  ')
         overview_heading=ttk.Frame(dashboard);overview_heading.pack(fill='x',pady=(0,12))
-        ttk.Label(overview_heading,text='Library overview',style='Title.TLabel').pack(anchor='w')
+        ttk.Label(overview_heading,text='Welcome to UniMod',style='Title.TLabel').pack(anchor='w')
+        ttk.Label(overview_heading,text='Choose a game above, then manage your mods in three simple steps.',
+                  style='Subtle.TLabel',wraplength=850).pack(anchor='w',pady=(4,0))
         self.overview_subtitle=tk.StringVar(value='Choose a game to inspect your mods.')
         ttk.Label(overview_heading,textvariable=self.overview_subtitle,style='Subtle.TLabel',wraplength=850).pack(anchor='w',pady=(4,0))
         # Focus the dashboard on three key numbers, not six giant metric cards.
@@ -3270,9 +3273,15 @@ class App(tk.Tk):
             val=ttk.Label(cell,text='—',style='Subtle.TLabel');val.pack(side='left')
             self.stat_labels[label]=val
         dash_actions=ttk.Frame(dashboard);dash_actions.pack(fill='x',pady=(0,15))
-        ttk.Button(dash_actions,text='Manage installed mods',command=lambda:self.tabs.select(1),
+        ttk.Button(dash_actions,text='1  My Mods',command=lambda:self.show_page('Installed Mods'),
                    style='Accent.TButton').pack(side='left',padx=(0,8))
-        ttk.Button(dash_actions,text='↻  Refresh inventory',command=self.refresh).pack(side='left')
+        ttk.Button(dash_actions,text='2  Find Mods',command=lambda:self.show_page('Mod Websites'),
+                   style='Accent.TButton').pack(side='left',padx=(0,8))
+        ttk.Button(dash_actions,text='3  Check My Mods',command=self.show_game_health,
+                   style='Accent.TButton').pack(side='left',padx=(0,8))
+        ttk.Button(dash_actions,text='Refresh',command=self.refresh).pack(side='left')
+        ttk.Label(dashboard,text='Your mods are never changed by simply viewing this page or running Check My Mods.',
+                  style='Subtle.TLabel').pack(anchor='w',pady=(0,12))
         sub=ttk.Frame(dashboard);sub.pack(fill='x',pady=(0,8))
         ttk.Label(sub,text='Installed packages',style='Section.TLabel').pack(side='left')
         ttk.Label(sub,text='Read-only overview',style='Subtle.TLabel').pack(side='right')
@@ -3829,7 +3838,7 @@ class App(tk.Tk):
         for label,_ in self.primary_workspaces:self.nav_list.insert('end',label)
         self.configure_tool_menu()
         self.fill_games();self.auto_detect(silent=True)
-        self.tabs.select(installed)
+        self.tabs.select(dashboard)
         self.sync_workspace()
         self.after(150,self.scan_global_library)
         if incoming_nxm is not None:
