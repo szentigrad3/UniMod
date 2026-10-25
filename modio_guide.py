@@ -64,6 +64,7 @@ def safe_report(state):
             'mod.io mod selected: ' + yes('mod_selected') + '\n'
             'Metadata check: ' + result('metadata_test') + '\n'
             'Temporary download check: ' + result('download_test') + '\n'
+            'Built-in offline safety test: ' + result('offline_test') + '\n'
             'Real installation/rollback: Not tested in this guide\n'
             'Privacy: API keys, user/game/mod IDs, signed URLs, and local paths omitted.\n')
 
