@@ -6327,8 +6327,21 @@ class App(tk.Tk):
             'provider','archive','filename','sha256','bytes','game_root','identity','version'))
 
     def downloads_selection_changed(self):
-        """Never apply a review result to a newly selected download."""
+        """Invalidate only when selection identity really changes.
+
+        Tk may deliver a pending selection event just after the Review button
+        callback; that event must not invalidate the very same file's review.
+        """
         if not hasattr(self,'downloads_tree'):return
+        selected=self.downloads_tree.selection()
+        try:
+            identity=(selected[0],self._download_receipt_identity(
+                self.provider_stage_rows[int(selected[0])])) if len(selected)==1 else None
+        except (ValueError,TypeError,IndexError,KeyError):
+            identity=None
+        if identity is not None and identity==getattr(self,'_downloads_last_selection',None):
+            return
+        self._downloads_last_selection=identity
         self._downloads_review_ticket=getattr(self,'_downloads_review_ticket',0)+1
         self._downloads_approved=None
         self.downloads_install_button.configure(state='disabled')
@@ -6358,6 +6371,7 @@ class App(tk.Tk):
         token=getattr(self,'_downloads_review_ticket',0)+1
         self._downloads_review_ticket=token
         identity=self._download_receipt_identity(receipt)
+        self._downloads_last_selection=(selected[0],identity)
         self._downloads_review_busy=True
         self._downloads_approved=None
         self.downloads_install_button.configure(state='disabled')
