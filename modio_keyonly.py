@@ -36,6 +36,8 @@ def resolve_game(game, api_key, *, fetch=None, user_id=None):
     query=urlencode({'api_key':api_key.strip(),'_q':name.strip(),'_limit':100})
     try:
         page=catalogue.fetch_json(api_base(user_id)+'/games?'+query,fetch=fetch)
+    except catalogue.ProviderRateLimited:
+        raise
     except Exception:
         raise ResolutionError('key_path_required') from None
     if not isinstance(page,dict) or not isinstance(page.get('data'),list):
@@ -75,6 +77,8 @@ def public_test_game_ids(api_key, *, fetch=None, user_id=None):
         'api_key':api_key.strip(), '_limit':30, '_sort':'-mods_count_total'})
     try:
         response = catalogue.fetch_json(url,fetch=fetch)
+    except catalogue.ProviderRateLimited:
+        raise
     except Exception:
         raise ResolutionError('key_path_required') from None
     if not isinstance(response,dict) or not isinstance(response.get('data'),list):
