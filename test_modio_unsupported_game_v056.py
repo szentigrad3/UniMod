@@ -135,6 +135,89 @@ class UnsupportedGameTests(unittest.TestCase):
         for secret in (KEY,SIGNED,GAME['root'],'900/70'):
             self.assertNotIn(secret,modio_aio.public_report(result))
 
+    def test_collection_without_signed_url_refreshes_exact_file_safely(self):
+        # A modfile collection can have no usable short-lived binary_url while
+        # the exact read-only file endpoint issues a current signed URL.
+        def unsigned_collection(url,headers):
+            from urllib.parse import urlsplit
+            if urlsplit(url).path.endswith('/files'):
+                listing=self.fetch(url,headers)
+                entry=dict(listing['data'][0])
+                entry['download']={'binary_url':'','date_expires':0}
+                return {'data':[entry]}
+            return self.fetch(url,headers)
+        result=self.run_test(allow_transfer=True,fetch=unsigned_collection)
+        self.assertEqual(result['reason'],'provider_only_complete',result)
+        self.assertEqual(result['download'],'Passed')
+        self.assertEqual(result['probe_file_lists'],1)
+        self.assertEqual(result['probe_file_records'],1)
+        self.assertEqual(result['probe_preview_candidates'],1)
+        self.assertEqual(result['probe_exact_checked'],1)
+        self.assertEqual(self.opener.calls,1)
+        self.assert_clean()
+        report=modio_aio.public_report(result)
+        self.assertIn('readable release list(s)',report)
+        self.assertIn('File screening:',report)
+        for secret in (KEY,SIGNED,GAME['root'],'900/70'):
+            self.assertNotIn(secret,report)
+
+    def test_collection_with_expired_url_refreshes_exact_file(self):
+        def expired_collection(url,headers):
+            if urlsplit(url).path.endswith('/files'):
+                listing=self.fetch(url,headers)
+                row=dict(listing['data'][0])
+                row['download']={'binary_url':SIGNED,'date_expires':5}
+                return {'data':[row]}
+            return self.fetch(url,headers)
+        result=self.run_test(allow_transfer=True,fetch=expired_collection)
+        self.assertEqual(result['reason'],'provider_only_complete')
+        self.assertEqual(self.opener.calls,1)
+        self.assert_clean()
+
+    def test_changed_exact_file_hash_is_never_downloaded(self):
+        def changed_exact(url,headers):
+            if urlsplit(url).path.endswith('/files/80'):
+                row=dict(self.fetch(url,headers))
+                row['filehash']={'md5':'f'*32}
+                return row
+            return self.fetch(url,headers)
+        result=self.run_test(allow_transfer=True,fetch=changed_exact)
+        self.assertNotEqual(result['reason'],'provider_only_complete')
+        self.assertEqual(result['probe_exact_checked'],0)
+        self.assertEqual(self.opener.calls,0)
+        self.assert_clean()
+
+    def test_unscanned_release_is_not_downloaded(self):
+        def unscanned(url,headers):
+            if urlsplit(url).path.endswith('/files'):
+                listing=self.fetch(url,headers)
+                row=dict(listing['data'][0])
+                row['virus_status']=0
+                return {'data':[row]}
+            return self.fetch(url,headers)
+        result=self.run_test(allow_transfer=True,fetch=unscanned)
+        self.assertEqual(result['reason'],'provider_no_eligible_zip')
+        self.assertEqual(result['probe_file_records'],1)
+        self.assertEqual(result['probe_preview_candidates'],0)
+        self.assertEqual(self.opener.calls,0)
+        self.assert_clean()
+
+    def test_partial_access_denial_does_not_obscure_valid_empty_list(self):
+        import provider_catalogues
+        def partly_denied(url,headers):
+            if urlsplit(url).path.endswith('/files'):
+                listing=self.fetch(url,headers)
+                return {'data':[]}
+            if urlsplit(url).path.endswith('/mods') and '/v1/games/901/' in urlsplit(url).path:
+                raise provider_catalogues.ProviderError('Provider authentication or API access is required.')
+            if urlsplit(url).path=='/v1/games' and '_q' not in parse_qs(urlsplit(url).query):
+                return {'data':[{'id':900},{'id':901}]}
+            return self.fetch(url,headers)
+        result=self.run_test(allow_transfer=True,fetch=partly_denied)
+        self.assertEqual(result['reason'],'provider_no_eligible_zip')
+        self.assertEqual(result['probe_file_lists'],1)
+        self.assertEqual(self.opener.calls,0)
+
     def test_failed_cdn_transfer_never_claims_selected_game_compatibility(self):
         self.opener=Opener(self.contents+b'corrupt')
         result=self.run_test(allow_transfer=True)
