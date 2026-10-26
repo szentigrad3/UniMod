@@ -5875,11 +5875,17 @@ class App(tk.Tk):
             return
         dialog=tk.Toplevel(self)
         dialog.title('UniMod — Run All Tests')
-        dialog.geometry('640x595')
-        dialog.minsize(580,545)
+        # Keep results readable on 768px laptops, without filling a 4K screen.
+        width=min(700,max(560,self.winfo_screenwidth()-90))
+        height=min(650,max(440,self.winfo_screenheight()-120))
+        dialog.geometry(f'{width}x{height}')
+        dialog.minsize(min(560,width),min(440,height))
         dialog.transient(self)
         container=ttk.Frame(dialog,padding=(18,16))
         container.pack(fill='both',expand=True)
+        # Allocate footer space FIRST, before long instructions or the report.
+        buttons=ttk.Frame(container)
+        buttons.pack(side='bottom',fill='x',pady=(8,0))
         ttk.Label(container,text='Run All Tests',style='Title.TLabel').pack(anchor='w')
         ttk.Label(container,text='Choose a game in UniMod, paste your private API key, and press Run All Tests. '
            'Offline safety checks run first, followed by mod.io catalogue access and an optional temporary ZIP test. '
@@ -5907,10 +5913,25 @@ class App(tk.Tk):
         ttk.Label(container,textvariable=status,wraplength=590,
                   style='Section.TLabel').pack(anchor='w',pady=(12,5))
         report=tk.StringVar(value=modio_aio.public_report({}))
-        ttk.Label(container,textvariable=report,wraplength=590,
-                  justify='left').pack(anchor='w',pady=(3,8))
-        buttons=ttk.Frame(container)
-        buttons.pack(fill='x',side='bottom',pady=(8,0))
+        report_frame=ttk.Frame(container)
+        report_frame.pack(fill='both',expand=True,pady=(3,3))
+        report_text=tk.Text(report_frame,wrap='word',height=7,
+                            font=('DejaVu Sans Mono',9),
+                            background='#182437',foreground='#e8f1ff',
+                            relief='flat',borderwidth=0,padx=8,pady=7)
+        report_scroll=ttk.Scrollbar(report_frame,orient='vertical',
+                                    command=report_text.yview)
+        report_scroll.pack(side='right',fill='y')
+        report_text.configure(yscrollcommand=report_scroll.set)
+        report_text.pack(side='left',fill='both',expand=True)
+        def sync_report(*_):
+            report_text.configure(state='normal')
+            report_text.delete('1.0','end')
+            report_text.insert('1.0',report.get())
+            report_text.configure(state='disabled')
+            report_text.yview_moveto(0)
+        report.trace_add('write',sync_report)
+        sync_report()
         def copy_result():
             self.clipboard_clear()
             self.clipboard_append(report.get())
