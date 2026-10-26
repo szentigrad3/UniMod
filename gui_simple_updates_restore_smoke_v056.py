@@ -47,9 +47,10 @@ with TemporaryDirectory() as temp:
             assert not app.updates_advanced.winfo_ismapped()
             primary=[button.cget('text') for button in find_widgets(app.updates_actions,ttk.Button)]
             for name in ('Review ready updates…','Review selected update…',
-                         'Restore a backup…','More update options  ▸'):
+                         'Restore a backup…'):
                 assert name in primary,(name,primary)
-            assert len(primary)==4,primary
+            assert len(primary)==3,primary
+            assert app.update_tools_button.cget('text')=='More update options  ▸'
             app.update_tools_button.invoke();app.update()
             assert app.updates_advanced.winfo_ismapped()
             assert app.unified_source_button.winfo_ismapped()
