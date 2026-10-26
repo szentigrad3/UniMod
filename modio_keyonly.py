@@ -55,15 +55,18 @@ def resolve_game(game, api_key, *, fetch=None):
 
 
 def public_test_game_ids(api_key, *, fetch=None):
-    """Small bounded sample of official catalogue games for provider-only tests.
+    """Bounded sample of heavily modded official games for provider-only tests.
 
     The selected installed game is NOT inferred from these records.
     Returns IDs only. No secret data, names or URLs are persisted.
     """
     if not isinstance(api_key,str) or len(api_key.strip())<8:
         raise ResolutionError('connect')
+    # Recently published games often have zero mods. The documented
+    # mods_count_total sort favours established public catalogues and makes
+    # the approved provider-only test much more likely to find an eligible ZIP.
     url = 'https://api.mod.io/v1/games?' + urlencode({
-        'api_key':api_key.strip(), '_limit':15, '_sort':'-date_live'})
+        'api_key':api_key.strip(), '_limit':30, '_sort':'-mods_count_total'})
     try:
         response = catalogue.fetch_json(url,fetch=fetch)
     except Exception:
@@ -71,10 +74,10 @@ def public_test_game_ids(api_key, *, fetch=None):
     if not isinstance(response,dict) or not isinstance(response.get('data'),list):
         raise ResolutionError('game_api')
     result=[]
-    for item in response['data'][:15]:
+    for item in response['data'][:30]:
         ident=str(item.get('id') or '') if isinstance(item,dict) else ''
         if re.fullmatch(r'[1-9][0-9]{0,11}',ident) and ident not in result:
             result.append(ident)
-        if len(result)>=4:
+        if len(result)>=8:
             break
     return result
