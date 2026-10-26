@@ -350,7 +350,7 @@ class UnsupportedGameTests(unittest.TestCase):
         self.assertEqual(result['reason'],'provider_request_failed',result)
         self.assertEqual(result['probe_games'],3)
         self.assertEqual(result['probe_mods'],6)
-        self.assertEqual(result['probe_requests'],modio_aio.MAX_PUBLIC_PROBE_REQUESTS)
+        self.assertEqual(result['probe_requests'],16)
         self.assertLessEqual(result['probe_requests']+1,19)
         self.assertGreater(result['probe_exact_attempts'],0)
         self.assertEqual(result['probe_exact_checked'],0)
