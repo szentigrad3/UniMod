@@ -60,7 +60,7 @@ with tempfile.TemporaryDirectory() as td:
                 spin(app)
             body=report.get('1.0','end-1c')
             assert 'Independent' not in body or 'provider' in body
-            assert 'no suitable independent public test ZIP' in body
+            assert 'public sample had no verified release lists' in body
             assert 'Real-game installation: Not attempted' in body
             buttons['Copy safe report'].invoke()
             assert 'Real-game installation: Not attempted' in app.clipboard_get()
