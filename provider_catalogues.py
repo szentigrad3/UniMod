@@ -23,6 +23,16 @@ KEYED_PROVIDERS = ('CurseForge', 'mod.io')
 class ProviderError(ValueError):
     """No server error body, URL query or credentials are revealed."""
 
+class ProviderRateLimited(ProviderError):
+    """429 with bounded safe server retry advice, never the request URL."""
+    def __init__(self, retry_after=60):
+        try: seconds=int(retry_after)
+        except (TypeError,ValueError,OverflowError):seconds=60
+        # A rolling limit can have Retry-After: 0; mod.io recommends 60 s.
+        self.retry_after_seconds=max(1,min(3600,seconds or 60))
+        super().__init__('Provider rate limit reached. Try later.')
+
+
 
 def clean_search(text):
     if not isinstance(text, str) or not 2 <= len(text.strip()) <= 120 or any(ord(c)<32 for c in text):
@@ -73,7 +83,9 @@ def fetch_json(url, *, headers=None, fetch=None, limit=MAX_RESPONSE):
             result=json.loads(raw)
         except urllib.error.HTTPError as ex:
             if ex.code in (401,403): raise ProviderError('Provider authentication or API access is required.') from None
-            if ex.code==429: raise ProviderError('Provider rate limit reached. Try later.') from None
+            if ex.code==429:
+                retry=ex.headers.get('Retry-After') if ex.headers else None
+                raise ProviderRateLimited(retry) from None
             raise ProviderError(f'Provider request failed (HTTP {ex.code}).') from None
         except urllib.error.URLError:
             raise ProviderError('Could not connect to the provider. Check your network.') from None
