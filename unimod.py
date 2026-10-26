@@ -5970,6 +5970,10 @@ class App(tk.Tk):
         }
         def start():
             if self._modio_aio_running:return
+            remaining=getattr(self,'_modio_aio_rate_limit_until',0)-time.monotonic()
+            if remaining>0:
+                status.set(f'mod.io rate limit cooldown active. Try again in {int(remaining)+1} seconds.')
+                return
             approve=bool(transfer.get())
             if approve:
                 approve=messagebox.askyesno('Approve temporary test download',
@@ -6041,6 +6045,11 @@ class App(tk.Tk):
                     return
                 report.set(modio_aio.public_report(payload))
                 self._modio_offline_result=payload.get('offline','Failed')
+                if payload.get('reason')=='provider_rate_limited':
+                    try:retry=int(payload.get('retry_after_seconds') or 60)
+                    except (TypeError,ValueError,OverflowError):retry=60
+                    # A provider rolling limit needs at least one quiet minute.
+                    self._modio_aio_rate_limit_until=time.monotonic()+max(60,min(3600,retry))
                 if payload.get('game')=='Passed':
                     self.provider_key.set(key)
                     self.provider_choice.set('mod.io')
