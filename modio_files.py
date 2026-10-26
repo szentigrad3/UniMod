@@ -146,7 +146,7 @@ def list_probe_candidates(identity, *, user_id, api_key, fetch=None, limit=3):
             rejected+=1
             continue
         fid=str(item.get('id') or '')
-        if not re.fullmatch(r'[1-9]\\d{0,11}',fid):
+        if not re.fullmatch(r'[1-9]\d{0,11}',fid):
             rejected+=1
             continue
         try:
