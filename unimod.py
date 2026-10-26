@@ -3962,9 +3962,9 @@ class App(tk.Tk):
         ttk.Button(self.updates_actions,text='Restore a backup…',
                    command=self.restore_from_backup).pack(side='left',padx=(0,8))
         self.update_tools_button=ttk.Button(
-            self.updates_actions,text='More update options  ▸',
+            header,text='More update options  ▸',
             command=self.toggle_update_tools)
-        self.update_tools_button.pack(side='right')
+        self.update_tools_button.pack(side='right',padx=(0,8))
         self.updates_advanced=ttk.Frame(updates)
         more_main=ttk.Frame(self.updates_advanced);more_main.pack(fill='x',pady=(0,6))
         ttk.Button(more_main,text='Find downloaded updates',
