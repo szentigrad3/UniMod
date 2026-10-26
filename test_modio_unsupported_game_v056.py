@@ -347,7 +347,7 @@ class UnsupportedGameTests(unittest.TestCase):
                         'download':{'binary_url':''}}
             self.fail('unexpected test endpoint: '+uri.path)
         result=self.run_test(allow_transfer=True,fetch=never_verified)
-        self.assertEqual(result['reason'],'provider_request_failed',result)
+        self.assertEqual(result['reason'],'provider_exact_unverified',result)
         self.assertEqual(result['probe_games'],3)
         self.assertEqual(result['probe_mods'],6)
         self.assertEqual(result['probe_requests'],16)
