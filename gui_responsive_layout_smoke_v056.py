@@ -88,8 +88,6 @@ with tempfile.TemporaryDirectory() as temp:
 
             app.show_page('Installed Mods');app.update()
             page=app.nametowidget(app._tab_with_name('Installed Mods'))
-            print('MY_MODS_DEBUG',[(child,str(child.winfo_manager()),child.winfo_ismapped(),
-                child.winfo_width(),child.winfo_height()) for child in page.winfo_children()],flush=True)
             for text in ('Check My Mods','Advanced view  ▸'):
                 within(find_button(page,text),page,'My Mods '+text)
             within(app.filter_entry,page,'Mod search')
