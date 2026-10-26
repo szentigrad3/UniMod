@@ -3952,7 +3952,9 @@ class App(tk.Tk):
         self.unified_tree.configure(yscrollcommand=scrollbar.set)
         self.unified_tree.bind('<Double-1>',lambda *_:self.unified_open_page())
         self.updates_actions=ttk.Frame(updates)
-        self.updates_actions.pack(fill='x',pady=(10,0))
+        # Reserve the primary action row before the expanding results table:
+        # at 600px logical height the table otherwise consumes its space.
+        self.updates_actions.pack(side='bottom',fill='x',pady=(10,0),before=area)
         ttk.Button(self.updates_actions,text='Review ready updates…',
                    command=self.unified_review_ready,style='Accent.TButton').pack(side='left',padx=(0,8))
         ttk.Button(self.updates_actions,text='Review selected update…',
