@@ -57,6 +57,7 @@ jobs:
       - name: AIO dialog at compact desktop size
         run: |
           xvfb-run -a -s "-screen 0 1024x768x24" .buildvenv/bin/python gui_modio_aio_scroll_smoke_v056.py
+          xvfb-run -a -s "-screen 0 1024x768x24" .buildvenv/bin/python gui_modio_optional_api_path_smoke_v056.py
       - name: Responsive desktop UI sizes
         run: |
           for size in 1024x768 1920x1080 3840x2160; do
