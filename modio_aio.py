@@ -170,7 +170,10 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
                     report['probe_exact_checked']+=1
                 except Exception as exc:
                     if stop(exc):return report
-                    ordinary_error(exc)
+                    # Invalid or changed exact-file metadata is a verification
+                    # rejection, not proof of provider/API failure.
+                    if not isinstance(exc,modio_files.ModioError):
+                        ordinary_error(exc)
                     report['probe_exact_rejected']+=1
                     continue
 
