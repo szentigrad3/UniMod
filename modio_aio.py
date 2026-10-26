@@ -27,7 +27,7 @@ def validate_user_api_path(value):
     if not isinstance(value,str):
         raise ValueError('invalid_api_path')
     match=re.fullmatch(
-        r'https://u-([1-9][0-9]{0,11})\\.modapi\\.io/v1/?',
+        r'https://u-([1-9][0-9]{0,11})\.modapi\.io/v1/?',
         value.strip())
     if match is None:
         raise ValueError('invalid_api_path')
