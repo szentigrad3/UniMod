@@ -3500,8 +3500,10 @@ class App(tk.Tk):
         self.tabs.add(downloads_home,text='  Downloads  ')
         ttk.Label(downloads_home,text='Downloads',style='Title.TLabel').pack(anchor='w',pady=(0,8))
         ttk.Label(downloads_home,
-                  text='Check downloads before installing them. Nothing on this page changes your games.',
-                  style='Subtle.TLabel',wraplength=900).pack(anchor='w',pady=(0,16))
+                  text='Select a downloaded mod to check it first. Updates to existing mods always need review and approval.',
+                  style='Subtle.TLabel',wraplength=900).pack(anchor='w',pady=(0,8))
+        ttk.Button(downloads_home,text='Review Nexus / ZIP downloads',
+                   command=lambda:self.show_page('Update Inbox')).pack(anchor='w',pady=(0,12))
         provider_group=ttk.Frame(downloads_home,style='Card.TFrame',padding=(20,18))
         provider_group.pack(fill='x',pady=(0,12))
         ttk.Label(provider_group,text='From mod websites in UniMod',
@@ -3547,20 +3549,6 @@ class App(tk.Tk):
         self.downloads_install_button.pack(side='left',padx=(0,9))
         ttk.Button(row,text='More download options…',
                    command=self.provider_review_downloads).pack(side='left')
-        nexus_group=ttk.Frame(downloads_home,style='Card.TFrame',padding=(20,18))
-        nexus_group.pack(fill='x',pady=(0,12))
-        ttk.Label(nexus_group,text='Nexus links and downloaded ZIP updates',
-                  style='CardHeading.TLabel').pack(anchor='w',pady=(0,6))
-        ttk.Label(nexus_group,
-                  text='Review Nexus download requests or scan ZIP updates from your Downloads folder. '
-                       'Existing mods are not replaced without a separate approval.',
-                  style='Muted.TLabel',wraplength=800).pack(anchor='w',pady=(0,10))
-        ttk.Button(nexus_group,text='Review Nexus / ZIP downloads',
-                   command=lambda:self.show_page('Update Inbox')).pack(anchor='w')
-        ttk.Label(downloads_home,
-                  text='Tip: If you have a local ZIP to install, select a game and use Install ZIP in the top bar. '
-                       'Updates to existing mods should use the reviewed update workflow.',
-                  style='Subtle.TLabel',wraplength=950).pack(anchor='w',pady=(14,0))
         self.tabs.add(tools,text='  Profiles & Tools  ')
         diagnostics=ttk.Frame(self.tabs,padding=12);self.tabs.add(diagnostics,text='  Game Diagnostics  ')
         ttk.Label(diagnostics,text='Steam / Proton / Mod Loader Diagnostics',style='Section.TLabel').pack(anchor='w',pady=(0,8))
