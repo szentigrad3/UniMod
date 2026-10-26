@@ -108,7 +108,7 @@ class UnsupportedGameTests(unittest.TestCase):
         for private in (KEY,SIGNED,GAME['root'],'900/70'):
             self.assertNotIn(private,report)
 
-    def test_independent_fallback_checks_active_game_beyond_first_four(self):
+    def test_independent_fallback_stays_within_three_games(self):
         def later_game(url, headers):
             parts=urlsplit(url)
             params=parse_qs(parts.query)
@@ -127,10 +127,11 @@ class UnsupportedGameTests(unittest.TestCase):
                 return {'data':[]}
             return self.fetch(url,headers)
         result=self.run_test(fetch=later_game,allow_transfer=True)
-        self.assertEqual(result['reason'],'provider_only_complete')
-        self.assertEqual(result['download'],'Passed')
+        self.assertEqual(result['reason'],'provider_sample_unavailable')
+        self.assertEqual(result['probe_games'],3)
+        self.assertEqual(result['download'],'Not available')
         self.assertEqual(result['game'],'Not available')
-        self.assertEqual(self.opener.calls,1)
+        self.assertEqual(self.opener.calls,0)
         self.assert_clean()
         for secret in (KEY,SIGNED,GAME['root'],'900/70'):
             self.assertNotIn(secret,modio_aio.public_report(result))
@@ -182,7 +183,7 @@ class UnsupportedGameTests(unittest.TestCase):
                 return row
             return self.fetch(url,headers)
         result=self.run_test(allow_transfer=True,fetch=changed_exact)
-        self.assertNotEqual(result['reason'],'provider_only_complete')
+        self.assertEqual(result['reason'],'provider_exact_unverified')
         self.assertEqual(result['probe_exact_checked'],0)
         self.assertEqual(self.opener.calls,0)
         self.assert_clean()
@@ -346,7 +347,9 @@ class UnsupportedGameTests(unittest.TestCase):
                         'download':{'binary_url':''}}
             self.fail('unexpected test endpoint: '+uri.path)
         result=self.run_test(allow_transfer=True,fetch=never_verified)
-        self.assertEqual(result['reason'],'provider_request_budget_reached',result)
+        self.assertEqual(result['reason'],'provider_request_failed',result)
+        self.assertEqual(result['probe_games'],3)
+        self.assertEqual(result['probe_mods'],6)
         self.assertEqual(result['probe_requests'],modio_aio.MAX_PUBLIC_PROBE_REQUESTS)
         self.assertLessEqual(result['probe_requests']+1,19)
         self.assertGreater(result['probe_exact_attempts'],0)
