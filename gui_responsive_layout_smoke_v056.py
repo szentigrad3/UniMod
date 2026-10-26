@@ -14,7 +14,10 @@ import unimod
 
 def within(widget, region, label):
     widget.update_idletasks()
-    assert widget.winfo_ismapped(), f'{label} is not mapped'
+    assert widget.winfo_ismapped(), (f'{label} is not mapped; '
+        f'widget={widget}, manager={widget.winfo_manager()}, '
+        f'parent={widget.winfo_parent()}, parent-mapped={widget.nametowidget(widget.winfo_parent()).winfo_ismapped()}, '
+        f'active={widget.winfo_toplevel().tabs.tab(widget.winfo_toplevel().tabs.select(),"text")!r}')
     ax,ay=widget.winfo_rootx(),widget.winfo_rooty()
     bx,by=region.winfo_rootx(),region.winfo_rooty()
     aw,ah=widget.winfo_width(),widget.winfo_height()
@@ -85,6 +88,8 @@ with tempfile.TemporaryDirectory() as temp:
 
             app.show_page('Installed Mods');app.update()
             page=app.nametowidget(app._tab_with_name('Installed Mods'))
+            print('MY_MODS_DEBUG',[(child,str(child.winfo_manager()),child.winfo_ismapped(),
+                child.winfo_width(),child.winfo_height()) for child in page.winfo_children()],flush=True)
             for text in ('Check My Mods','Advanced view  ▸'):
                 within(find_button(page,text),page,'My Mods '+text)
             within(app.filter_entry,page,'Mod search')
