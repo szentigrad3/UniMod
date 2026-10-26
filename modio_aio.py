@@ -402,7 +402,7 @@ HELP = {
     'provider_only_download_failed': 'Independent public mod.io ZIP download failed. Your installed game was not touched.',
     'provider_sample_unavailable': 'Selected game is not on mod.io; the public sample had no verified release lists to test.',
     'provider_no_eligible_zip': 'Readable mod release lists contained no ZIP that met the checksum, size and safety requirements. Some other API requests may have been restricted.',
-    'provider_exact_unverified': 'ZIP previews were found, but none passed the independent exact-file verification. No download or installation was attempted.'
+    'provider_exact_unverified': 'ZIP previews were found, but none passed the independent exact-file verification. No download or installation was attempted.',
     'provider_api_path_required': 'The provider-only catalogue cannot be read using the legacy API address. Your mod.io account-specific API path may be required.',
     'provider_api_access_required': 'mod.io refused one or more mod/release requests. Public game catalogue access does not verify access to downloads; your account-specific API path may be required.',
     'provider_rate_limited': 'mod.io returned a rate limit (429). UniMod stopped immediately; wait for the provider cooldown before retrying.',
