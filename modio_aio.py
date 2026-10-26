@@ -67,6 +67,10 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
     report['probe_games']=0
     report['probe_mods']=0
     report['probe_file_lists']=0
+    report['probe_file_records']=0
+    report['probe_preview_candidates']=0
+    report['probe_exact_checked']=0
+    report['probe_access_denials']=0
     report['probe_stage']='game catalogue'
     seen_access=seen_limit=seen_error=False
     try:
@@ -107,40 +111,62 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
             report['probe_mods']+=1
             report['probe_stage']='release files'
             try:
-                rows=modio_files.list_modfiles(
-                    public_gid+'/'+proposed,user_id=account_id,api_key=api_key,fetch=fetch)
+                previews,count,rejected=modio_files.list_probe_candidates(
+                    public_gid+'/'+proposed,user_id=account_id,api_key=api_key,
+                    fetch=fetch,limit=3)
                 report['probe_file_lists']+=1
-                eligible=[r for r in rows if type(r.get('size')) is int
-                          and 0<r['size']<=modio_live_probe.MAX_PROBE_BYTES]
-                if not eligible:
-                    continue
-                candidate=min(eligible,key=lambda r:(r['size'],-int(r['version_id'])))
-                modio_files.refresh_selected(candidate,user_id=account_id,api_key=api_key,fetch=fetch)
+                report['probe_file_records']+=count
+                report['probe_preview_candidates']+=len(previews)
             except Exception as exc:
                 issue=_probe_issue(exc)
                 seen_access |= issue=='provider_api_access_required'
                 seen_limit |= issue=='provider_rate_limited'
                 seen_error |= issue=='provider_request_failed'
+                if issue=='provider_api_access_required':
+                    report['probe_access_denials']+=1
                 continue
-            report['selection']='Independent public test mod'
-            report['metadata']='Passed'
-            _emit(progress,'download')
-            report['probe_stage']='temporary ZIP'
-            try:
-                downloaded=modio_live_probe.probe_download(
-                    candidate,user_id=account_id,api_key=api_key,fetch=fetch,
-                    opener=opener,temp_parent=temp_parent)
-                if (downloaded.get('temporary') is not True or
-                        downloaded.get('installed') is not False):
-                    raise ValueError('Unexpected download result')
-                report['download']='Passed'
-                report['verified_bytes']=int(downloaded.get('bytes_verified',0))
-                report['reason']='provider_only_complete'
-            except Exception:
-                report['download']='Failed'
-                report['reason']='provider_only_download_failed'
-            return report
-    if seen_access:
+            for preview in previews:
+                if preview['size']>modio_live_probe.MAX_PROBE_BYTES:
+                    continue
+                report['probe_stage']='exact file metadata'
+                try:
+                    # A list result is not a download authorization. Read the
+                    # exact approved file record, verify hash and identity,
+                    # and obtain its current signed URL before trying bytes.
+                    candidate=modio_files.refresh_selected(
+                        preview,user_id=account_id,api_key=api_key,fetch=fetch)
+                    report['probe_exact_checked']+=1
+                except Exception as exc:
+                    issue=_probe_issue(exc)
+                    seen_access |= issue=='provider_api_access_required'
+                    seen_limit |= issue=='provider_rate_limited'
+                    seen_error |= issue=='provider_request_failed'
+                    if issue=='provider_api_access_required':
+                        report['probe_access_denials']+=1
+                    continue
+                report['selection']='Independent public test mod'
+                report['metadata']='Passed'
+                _emit(progress,'download')
+                report['probe_stage']='temporary ZIP'
+                try:
+                    downloaded=modio_live_probe.probe_download(
+                        candidate,user_id=account_id,api_key=api_key,
+                        fetch=fetch,opener=opener,temp_parent=temp_parent)
+                    if (downloaded.get('temporary') is not True or
+                            downloaded.get('installed') is not False):
+                        raise ValueError('Unexpected download result')
+                    report['download']='Passed'
+                    report['verified_bytes']=int(downloaded.get('bytes_verified',0))
+                    report['reason']='provider_only_complete'
+                except Exception:
+                    report['download']='Failed'
+                    report['reason']='provider_only_download_failed'
+                return report
+    if report['probe_file_lists'] and not report['probe_preview_candidates']:
+        # A handful of restricted mods does not invalidate all of the
+        # successfully read lists. They genuinely yielded no eligible ZIP.
+        report['reason']='provider_no_eligible_zip'
+    elif seen_access:
         report['reason']='provider_api_access_required'
     elif seen_limit:
         report['reason']='provider_rate_limited'
@@ -326,7 +352,7 @@ HELP = {
     'provider_only_complete': 'Public mod.io ZIP verified using a different supported game. This does NOT test your installed game or verify account ownership.',
     'provider_only_download_failed': 'Independent public mod.io ZIP download failed. Your installed game was not touched.',
     'provider_sample_unavailable': 'Selected game is not on mod.io; the public sample had no verified release lists to test.',
-    'provider_no_eligible_zip': 'Public mod listings were readable, but no ZIP passed the size, checksum and safety requirements.',
+    'provider_no_eligible_zip': 'Readable mod release lists contained no ZIP that met the checksum, size and safety requirements. Some other API requests may have been restricted.',
     'provider_api_path_required': 'The provider-only catalogue cannot be read using the legacy API address. Your mod.io account-specific API path may be required.',
     'provider_api_access_required': 'mod.io refused one or more mod/release requests. Public game catalogue access does not verify access to downloads; your account-specific API path may be required.',
     'provider_rate_limited': 'mod.io rate-limited the provider-only test. Try again later; this does not mean your API key is invalid.',
@@ -357,9 +383,20 @@ def public_report(result):
             + ('Public sample: checked ' +
                str(max(0,min(8,state.get('probe_games',0)))) + ' game(s), ' +
                str(max(0,min(40,state.get('probe_mods',0)))) + ' mod(s), ' +
-               str(max(0,min(40,state.get('probe_file_lists',0)))) + ' verified release list(s).\n'
+               str(max(0,min(40,state.get('probe_file_lists',0)))) + ' readable release list(s).\n'
                if state.get('scope')=='Provider-only (different game)' and
                   all(type(state.get(k)) is int for k in
                       ('probe_games','probe_mods','probe_file_lists')) else '')
+            + ('File screening: '+str(max(0,min(4000,state['probe_file_records'])))+
+               ' listed file(s); '+str(max(0,min(120,state['probe_preview_candidates'])))+
+               ' provisional ZIP candidate(s); '+
+               str(max(0,min(120,state['probe_exact_checked'])))+
+               ' exact-file verification(s); '+
+               str(max(0,min(120,state['probe_access_denials'])))+
+               ' access-refused request(s).\n'
+               if state.get('scope')=='Provider-only (different game)' and
+                  all(type(state.get(k)) is int for k in
+                      ('probe_file_records','probe_preview_candidates',
+                       'probe_exact_checked','probe_access_denials')) else '')
             + 'Real-game installation: Not attempted\n'
             'Private key, account IDs, mod IDs, paths and download URLs: excluded.\n')
