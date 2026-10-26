@@ -265,6 +265,10 @@ def run_aio(game, *, game_id='', user_id='', api_key='', api_path='', mod_id='',
             report['catalogue']='Passed'
         report['game'] = 'Passed'
         report['scope']='Selected game'
+    except catalogue.ProviderRateLimited as exc:
+        report['reason']='provider_rate_limited'
+        report['retry_after_seconds']=exc.retry_after_seconds
+        return report
     except modio_keyonly.ResolutionError as exc:
         code=str(exc)
         if code in ('game_not_found','ambiguous_game'):
@@ -330,6 +334,11 @@ def run_aio(game, *, game_id='', user_id='', api_key='', api_path='', mod_id='',
         # Verify exact identity and source metadata before any transfer.
         modio_files.refresh_selected(rows[0], user_id=user_id, api_key=api_key, fetch=fetch)
         report['metadata'] = 'Passed'
+    except catalogue.ProviderRateLimited as exc:
+        report['metadata']='Not available'
+        report['reason']='provider_rate_limited'
+        report['retry_after_seconds']=exc.retry_after_seconds
+        return report
     except Exception:
         report['metadata'] = 'Failed'
         report['reason'] = 'metadata_api'
@@ -357,6 +366,10 @@ def run_aio(game, *, game_id='', user_id='', api_key='', api_path='', mod_id='',
         report['download'] = 'Passed'
         report['verified_bytes'] = int(outcome.get('bytes_verified', 0))
         report['reason'] = 'complete'
+    except catalogue.ProviderRateLimited as exc:
+        report['download']='Not available'
+        report['reason']='provider_rate_limited'
+        report['retry_after_seconds']=exc.retry_after_seconds
     except Exception:
         report['download'] = 'Failed'
         report['reason'] = 'download_failed'
