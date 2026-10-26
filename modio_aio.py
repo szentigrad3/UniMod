@@ -43,17 +43,19 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
     except Exception:
         report['reason']='provider_sample_unavailable'
         return report
-    for public_gid in game_ids[:4]:
+    # Cap network work while preferring popular mods in well-populated games.
+    # A result never represents the user-selected installed game.
+    for public_gid in game_ids[:8]:
         try:
             base=modio_files._base(None,api_key)
             url=f'{base}/games/{public_gid}/mods?'+urlencode({
-                'api_key':api_key.strip(),'_limit':5})
+                'api_key':api_key.strip(),'_limit':12,'_sort':'-downloads_total'})
             page=catalogue.fetch_json(url,fetch=fetch)
             if not isinstance(page,dict) or not isinstance(page.get('data'),list):
                 continue
         except Exception:
             continue
-        for item in page['data'][:3]:
+        for item in page['data'][:5]:
             proposed=str(item.get('id') or '') if isinstance(item,dict) else ''
             if (not re.fullmatch(r'[1-9][0-9]{0,11}',proposed)
                     or (item.get('game_id') is not None
