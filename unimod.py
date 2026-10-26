@@ -3500,8 +3500,10 @@ class App(tk.Tk):
         self.tabs.add(downloads_home,text='  Downloads  ')
         ttk.Label(downloads_home,text='Downloads',style='Title.TLabel').pack(anchor='w',pady=(0,8))
         ttk.Label(downloads_home,
-                  text='Check downloads before installing them. Nothing on this page changes your games.',
-                  style='Subtle.TLabel',wraplength=900).pack(anchor='w',pady=(0,16))
+                  text='Select a downloaded mod to check it first. Updates to existing mods always need review and approval.',
+                  style='Subtle.TLabel',wraplength=900).pack(anchor='w',pady=(0,8))
+        ttk.Button(downloads_home,text='Review Nexus / ZIP downloads',
+                   command=lambda:self.show_page('Update Inbox')).pack(anchor='w',pady=(0,12))
         provider_group=ttk.Frame(downloads_home,style='Card.TFrame',padding=(20,18))
         provider_group.pack(fill='x',pady=(0,12))
         ttk.Label(provider_group,text='From mod websites in UniMod',
@@ -3547,20 +3549,6 @@ class App(tk.Tk):
         self.downloads_install_button.pack(side='left',padx=(0,9))
         ttk.Button(row,text='More download options…',
                    command=self.provider_review_downloads).pack(side='left')
-        nexus_group=ttk.Frame(downloads_home,style='Card.TFrame',padding=(20,18))
-        nexus_group.pack(fill='x',pady=(0,12))
-        ttk.Label(nexus_group,text='Nexus links and downloaded ZIP updates',
-                  style='CardHeading.TLabel').pack(anchor='w',pady=(0,6))
-        ttk.Label(nexus_group,
-                  text='Review Nexus download requests or scan ZIP updates from your Downloads folder. '
-                       'Existing mods are not replaced without a separate approval.',
-                  style='Muted.TLabel',wraplength=800).pack(anchor='w',pady=(0,10))
-        ttk.Button(nexus_group,text='Review Nexus / ZIP downloads',
-                   command=lambda:self.show_page('Update Inbox')).pack(anchor='w')
-        ttk.Label(downloads_home,
-                  text='Tip: If you have a local ZIP to install, select a game and use Install ZIP in the top bar. '
-                       'Updates to existing mods should use the reviewed update workflow.',
-                  style='Subtle.TLabel',wraplength=950).pack(anchor='w',pady=(14,0))
         self.tabs.add(tools,text='  Profiles & Tools  ')
         diagnostics=ttk.Frame(self.tabs,padding=12);self.tabs.add(diagnostics,text='  Game Diagnostics  ')
         ttk.Label(diagnostics,text='Steam / Proton / Mod Loader Diagnostics',style='Section.TLabel').pack(anchor='w',pady=(0,8))
@@ -3712,16 +3700,20 @@ class App(tk.Tk):
         ttk.Label(pagebar,text='My Mods',style='Title.TLabel').pack(side='left')
         self.count_label=ttk.Label(pagebar,text='0 mods',style='Subtle.TLabel')
         self.count_label.pack(side='right',padx=8)
+        # Keep the page title/counter separate from action buttons: a single
+        # horizontal row clips Check My Mods on 1024px screens.
+        my_mod_actions=ttk.Frame(installed)
+        my_mod_actions.pack(fill='x',pady=(0,7))
         self.mod_advanced_visible=tk.BooleanVar(value=False)
-        self.mod_advanced_button=ttk.Button(pagebar,text='Advanced view  ▸',
+        self.mod_advanced_button=ttk.Button(my_mod_actions,text='Advanced view  ▸',
                                              command=self.toggle_mod_advanced,
                                              style='Top.TButton')
-        self.mod_advanced_button.pack(side='right',padx=8)
+        self.mod_advanced_button.pack(side='right',padx=(7,0))
         self.details_visible=tk.BooleanVar(value=False)
-        ttk.Button(pagebar,text='ⓘ Mod details',command=self.toggle_details,
-                   style='Top.TButton').pack(side='right',padx=8)
-        ttk.Button(pagebar,text='Check My Mods',command=self.show_game_health,
-                   style='Accent.TButton').pack(side='right',padx=8)
+        ttk.Button(my_mod_actions,text='ⓘ Mod details',command=self.toggle_details,
+                   style='Top.TButton').pack(side='right',padx=(7,0))
+        ttk.Button(my_mod_actions,text='Check My Mods',command=self.show_game_health,
+                   style='Accent.TButton').pack(side='left')
         ttk.Label(installed,text='Select a mod to see details. Use the On / Off column to enable or disable it.',
                   style='Subtle.TLabel',wraplength=950).pack(anchor='w',pady=(0,8))
         filterbar=ttk.Frame(installed);filterbar.pack(fill='x',pady=(0,7))
@@ -3948,7 +3940,9 @@ class App(tk.Tk):
         self.unified_tree.configure(yscrollcommand=scrollbar.set)
         self.unified_tree.bind('<Double-1>',lambda *_:self.unified_open_page())
         self.updates_actions=ttk.Frame(updates)
-        self.updates_actions.pack(fill='x',pady=(10,0))
+        # Reserve the primary action row before the expanding results table:
+        # at 600px logical height the table otherwise consumes its space.
+        self.updates_actions.pack(side='bottom',fill='x',pady=(10,0),before=area)
         ttk.Button(self.updates_actions,text='Review ready updates…',
                    command=self.unified_review_ready,style='Accent.TButton').pack(side='left',padx=(0,8))
         ttk.Button(self.updates_actions,text='Review selected update…',
@@ -3956,9 +3950,9 @@ class App(tk.Tk):
         ttk.Button(self.updates_actions,text='Restore a backup…',
                    command=self.restore_from_backup).pack(side='left',padx=(0,8))
         self.update_tools_button=ttk.Button(
-            self.updates_actions,text='More update options  ▸',
+            header,text='More update options  ▸',
             command=self.toggle_update_tools)
-        self.update_tools_button.pack(side='right')
+        self.update_tools_button.pack(side='right',padx=(0,8))
         self.updates_advanced=ttk.Frame(updates)
         more_main=ttk.Frame(self.updates_advanced);more_main.pack(fill='x',pady=(0,6))
         ttk.Button(more_main,text='Find downloaded updates',
