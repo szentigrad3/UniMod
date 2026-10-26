@@ -5905,6 +5905,24 @@ class App(tk.Tk):
                   'The key stays in this session. Some newer keys need '
                   'their unique API path and may not support key-only access.',
                   wraplength=580,style='Subtle.TLabel').pack(anchor='w',pady=(8,8))
+        # Most users need only their key. Some newer mod.io keys need the
+        # account URL; keep that optional and collapsed until explicitly chosen.
+        api_path=tk.StringVar(value='')
+        path_toggle=ttk.Button(container,text='Account API path (optional)  ▸')
+        path_toggle.pack(anchor='w',pady=(2,5))
+        path_row=ttk.Frame(container)
+        def toggle_path():
+            if path_row.winfo_manager():
+                path_row.pack_forget()
+                path_toggle.configure(text='Account API path (optional)  ▸')
+            else:
+                if not path_row.winfo_children():
+                    ttk.Label(path_row,text='From your mod.io API dashboard:').pack(anchor='w')
+                    ttk.Entry(path_row,textvariable=api_path,width=54).pack(
+                        fill='x',expand=True,pady=(3,0))
+                path_row.pack(fill='x',after=path_toggle,pady=(0,7))
+                path_toggle.configure(text='Account API path (optional)  ▾')
+        path_toggle.configure(command=toggle_path)
         transfer=tk.BooleanVar(value=True)
         ttk.Checkbutton(container,
             text='Test public mod.io ZIP (may be another game; 64 MiB maximum, then deleted)',
@@ -5966,7 +5984,8 @@ class App(tk.Tk):
             self._modio_aio_running=True
             start_btn.configure(state='disabled')
             key=secret.get().strip()
-            context=(key,)
+            path=api_path.get().strip()
+            context=(key,path)
             try:
                 current_game=self.current()
                 root=str(Path(current_game['root']).resolve()) if current_game else ''
@@ -5989,7 +6008,8 @@ class App(tk.Tk):
             def worker():
                 try:
                     result=modio_aio.run_aio(game,game_id=known_gid,user_id=known_uid,
-                            api_key=key,allow_transfer=approve,progress=progress)
+                            api_key=key,api_path=path,
+                            allow_transfer=approve,progress=progress)
                 except Exception:
                     result={'offline':'Failed','game':'Not tested','metadata':'Not tested',
                             'download':'Not tested','reason':'none'}
@@ -6011,7 +6031,7 @@ class App(tk.Tk):
                     now=self.current()
                     same_game=(bool(now) and str(Path(now['root']).resolve())==root
                          and now.get('name')==game.get('name')) if game else not bool(now)
-                    same_fields=context==(secret.get().strip(),)
+                    same_fields=context==(secret.get().strip(),api_path.get().strip())
                 except (OSError,ValueError,TypeError,KeyError):
                     same_game=False;same_fields=False
                 if not (same_game and same_fields):

@@ -153,7 +153,68 @@ class UnsupportedGameTests(unittest.TestCase):
         self.assertEqual(result['catalogue'],'Passed')
         self.assertEqual(result['game'],'Not available')
         self.assertEqual(result['metadata'],'Not available')
-        self.assertEqual(result['reason'],'provider_sample_unavailable')
+        self.assertEqual(result['reason'],'provider_no_eligible_zip')
+        self.assertGreater(result['probe_file_lists'],0)
+        self.assertEqual(self.opener.calls,0)
+
+    def test_deeper_api_restriction_reported_instead_of_no_zip(self):
+        import provider_catalogues
+        def denied(url,headers):
+            path=urlsplit(url).path
+            if path.startswith('/v1/games/900/mods'):
+                raise provider_catalogues.ProviderError(
+                    'Provider authentication or API access is required.')
+            return self.fetch(url,headers)
+        report=self.run_test(allow_transfer=True,fetch=denied)
+        self.assertEqual(report['game'],'Not available')
+        self.assertEqual(report['catalogue'],'Passed')
+        self.assertEqual(report['reason'],'provider_api_access_required')
+        self.assertEqual(report['probe_games'],1)
+        self.assertEqual(report['probe_file_lists'],0)
+        self.assertEqual(self.opener.calls,0)
+        safe=modio_aio.public_report(report)
+        self.assertIn('account-specific API path',safe)
+        self.assertIn('Public sample: checked 1 game(s)',safe)
+        self.assertNotIn(KEY,safe)
+        self.assertNotIn(SIGNED,safe)
+        self.assert_clean()
+
+    def test_rate_limit_distinguished_from_no_public_modfiles(self):
+        import provider_catalogues
+        def limited(url,headers):
+            path=urlsplit(url).path
+            if path.startswith('/v1/games/900/mods'):
+                raise provider_catalogues.ProviderError('Provider rate limit reached. Try later.')
+            return self.fetch(url,headers)
+        report=self.run_test(allow_transfer=True,fetch=limited)
+        self.assertEqual(report['reason'],'provider_rate_limited')
+        self.assertEqual(report['download'],'Not available')
+        self.assertEqual(self.opener.calls,0)
+        self.assert_clean()
+
+    def test_public_test_game_sample_block_distinguished(self):
+        import provider_catalogues
+        def limited(url,headers):
+            path=urlsplit(url).path
+            if path=='/v1/games' and '_q' not in parse_qs(urlsplit(url).query):
+                raise provider_catalogues.ProviderError('Provider authentication or API access is required.')
+            return self.fetch(url,headers)
+        report=self.run_test(allow_transfer=True,fetch=limited)
+        self.assertEqual(report['reason'],'provider_api_path_required')
+        self.assertEqual(report['probe_games'],0)
+        self.assertNotIn(KEY,modio_aio.public_report(report))
+        self.assertEqual(self.opener.calls,0)
+
+    def test_unknown_provider_exception_is_redacted(self):
+        def crashed(url,headers):
+            if urlsplit(url).path=='/v1/games/900/mods':
+                raise RuntimeError('private '+KEY+' '+SIGNED)
+            return self.fetch(url,headers)
+        report=self.run_test(allow_transfer=True,fetch=crashed)
+        self.assertEqual(report['reason'],'provider_request_failed')
+        safe=modio_aio.public_report(report)
+        self.assertNotIn(KEY,safe)
+        self.assertNotIn(SIGNED,safe)
         self.assertEqual(self.opener.calls,0)
 
     def test_denied_download_does_not_contact_other_games(self):

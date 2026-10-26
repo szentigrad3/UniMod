@@ -13,11 +13,17 @@ class ResolutionError(ValueError):
     pass
 
 
+def api_base(user_id=None):
+    """Use a verified user API path when supplied, else the legacy read-only API."""
+    return (f'https://u-{catalogue.numeric(user_id)}.modapi.io/v1'
+            if user_id is not None else 'https://api.mod.io/v1')
+
+
 def _normal(name):
     return re.sub('[^a-z0-9]', '', str(name or '').casefold())
 
 
-def resolve_game(game, api_key, *, fetch=None):
+def resolve_game(game, api_key, *, fetch=None, user_id=None):
     """Require one unambiguous exact-name game match from a complete page."""
     if not isinstance(game, dict) or game.get('kind') not in ('smapi','bepinex'):
         raise ResolutionError('choose_game')
@@ -29,7 +35,7 @@ def resolve_game(game, api_key, *, fetch=None):
     # Do not use /me: it requires OAuth, not an API key.
     query=urlencode({'api_key':api_key.strip(),'_q':name.strip(),'_limit':100})
     try:
-        page=catalogue.fetch_json('https://api.mod.io/v1/games?'+query,fetch=fetch)
+        page=catalogue.fetch_json(api_base(user_id)+'/games?'+query,fetch=fetch)
     except Exception:
         raise ResolutionError('key_path_required') from None
     if not isinstance(page,dict) or not isinstance(page.get('data'),list):
@@ -54,7 +60,7 @@ def resolve_game(game, api_key, *, fetch=None):
     return next(iter(found))
 
 
-def public_test_game_ids(api_key, *, fetch=None):
+def public_test_game_ids(api_key, *, fetch=None, user_id=None):
     """Bounded sample of heavily modded official games for provider-only tests.
 
     The selected installed game is NOT inferred from these records.
@@ -65,7 +71,7 @@ def public_test_game_ids(api_key, *, fetch=None):
     # Recently published games often have zero mods. The documented
     # mods_count_total sort favours established public catalogues and makes
     # the approved provider-only test much more likely to find an eligible ZIP.
-    url = 'https://api.mod.io/v1/games?' + urlencode({
+    url = api_base(user_id) + '/games?' + urlencode({
         'api_key':api_key.strip(), '_limit':30, '_sort':'-mods_count_total'})
     try:
         response = catalogue.fetch_json(url,fetch=fetch)
