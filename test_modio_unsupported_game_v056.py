@@ -108,6 +108,33 @@ class UnsupportedGameTests(unittest.TestCase):
         for private in (KEY,SIGNED,GAME['root'],'900/70'):
             self.assertNotIn(private,report)
 
+    def test_independent_fallback_checks_active_game_beyond_first_four(self):
+        def later_game(url, headers):
+            parts=urlsplit(url)
+            params=parse_qs(parts.query)
+            if parts.path=='/v1/games' and '_q' not in params:
+                self.assertEqual(params.get('_sort'),['-mods_count_total'])
+                self.assertEqual(params.get('_limit'),['30'])
+                return {'data':[
+                    {'id':901,'name':'No public mods 1'},
+                    {'id':902,'name':'No public mods 2'},
+                    {'id':903,'name':'No public mods 3'},
+                    {'id':904,'name':'No public mods 4'},
+                    {'id':900,'name':'Established test game'}],
+                    'result_total':5}
+            if parts.path in ('/v1/games/901/mods','/v1/games/902/mods',
+                              '/v1/games/903/mods','/v1/games/904/mods'):
+                return {'data':[]}
+            return self.fetch(url,headers)
+        result=self.run_test(fetch=later_game,allow_transfer=True)
+        self.assertEqual(result['reason'],'provider_only_complete')
+        self.assertEqual(result['download'],'Passed')
+        self.assertEqual(result['game'],'Not available')
+        self.assertEqual(self.opener.calls,1)
+        self.assert_clean()
+        for secret in (KEY,SIGNED,GAME['root'],'900/70'):
+            self.assertNotIn(secret,modio_aio.public_report(result))
+
     def test_failed_cdn_transfer_never_claims_selected_game_compatibility(self):
         self.opener=Opener(self.contents+b'corrupt')
         result=self.run_test(allow_transfer=True)
