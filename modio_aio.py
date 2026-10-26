@@ -66,8 +66,9 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
                              progress=None, temp_parent=None, account_id=None):
     """Bounded test of *one* temporary public ZIP from another game.
 
-    All provider-only GETs share a conservative request budget. A 429 stops
-    immediately: continuing to retry could cause credentials to be revoked.
+    All provider-only GETs share a conservative request budget. Probe at most
+    three games, two mods per game, and one smallest qualifying ZIP per mod.
+    A 429 stops immediately: continuing to retry risks API access.
     """
     report.update({
         'scope':'Provider-only (different game)',
@@ -121,7 +122,7 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
         report['reason']='provider_sample_unavailable'
         return report
 
-    for public_gid in game_ids[:8]:
+    for public_gid in game_ids[:3]:
         report['probe_games']+=1
         report['probe_stage']='mod catalogue'
         try:
@@ -137,7 +138,7 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
             ordinary_error(exc)
             continue
 
-        for item in page['data'][:5]:
+        for item in page['data'][:2]:
             proposed=str(item.get('id') or '') if isinstance(item,dict) else ''
             if (not re.fullmatch(r'[1-9][0-9]{0,11}',proposed)
                     or (item.get('game_id') is not None
@@ -148,7 +149,7 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
             try:
                 previews,count,rejected=modio_files.list_probe_candidates(
                     public_gid+'/'+proposed,user_id=account_id,api_key=api_key,
-                    fetch=counted_fetch,limit=3)
+                    fetch=counted_fetch,limit=1)
                 report['probe_file_lists']+=1
                 report['probe_file_records']+=count
                 report['probe_preview_candidates']+=len(previews)
@@ -203,6 +204,8 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
         report['reason']='provider_api_access_required'
     elif seen_error:
         report['reason']='provider_request_failed'
+    elif report['probe_preview_candidates'] and not report['probe_exact_checked']:
+        report['reason']='provider_exact_unverified'
     elif report['probe_file_lists']:
         report['reason']='provider_no_eligible_zip'
     else:
@@ -396,6 +399,7 @@ HELP = {
     'provider_only_download_failed': 'Independent public mod.io ZIP download failed. Your installed game was not touched.',
     'provider_sample_unavailable': 'Selected game is not on mod.io; the public sample had no verified release lists to test.',
     'provider_no_eligible_zip': 'Readable mod release lists contained no ZIP that met the checksum, size and safety requirements. Some other API requests may have been restricted.',
+    'provider_exact_unverified': 'ZIP previews were found, but none passed the independent exact-file verification. No download or installation was attempted.'
     'provider_api_path_required': 'The provider-only catalogue cannot be read using the legacy API address. Your mod.io account-specific API path may be required.',
     'provider_api_access_required': 'mod.io refused one or more mod/release requests. Public game catalogue access does not verify access to downloads; your account-specific API path may be required.',
     'provider_rate_limited': 'mod.io returned a rate limit (429). UniMod stopped immediately; wait for the provider cooldown before retrying.',
