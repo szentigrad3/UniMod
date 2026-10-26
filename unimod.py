@@ -3712,16 +3712,20 @@ class App(tk.Tk):
         ttk.Label(pagebar,text='My Mods',style='Title.TLabel').pack(side='left')
         self.count_label=ttk.Label(pagebar,text='0 mods',style='Subtle.TLabel')
         self.count_label.pack(side='right',padx=8)
+        # Keep the page title/counter separate from action buttons: a single
+        # horizontal row clips Check My Mods on 1024px screens.
+        my_mod_actions=ttk.Frame(installed)
+        my_mod_actions.pack(fill='x',pady=(0,7))
         self.mod_advanced_visible=tk.BooleanVar(value=False)
-        self.mod_advanced_button=ttk.Button(pagebar,text='Advanced view  ▸',
+        self.mod_advanced_button=ttk.Button(my_mod_actions,text='Advanced view  ▸',
                                              command=self.toggle_mod_advanced,
                                              style='Top.TButton')
-        self.mod_advanced_button.pack(side='right',padx=8)
+        self.mod_advanced_button.pack(side='right',padx=(7,0))
         self.details_visible=tk.BooleanVar(value=False)
-        ttk.Button(pagebar,text='ⓘ Mod details',command=self.toggle_details,
-                   style='Top.TButton').pack(side='right',padx=8)
-        ttk.Button(pagebar,text='Check My Mods',command=self.show_game_health,
-                   style='Accent.TButton').pack(side='right',padx=8)
+        ttk.Button(my_mod_actions,text='ⓘ Mod details',command=self.toggle_details,
+                   style='Top.TButton').pack(side='right',padx=(7,0))
+        ttk.Button(my_mod_actions,text='Check My Mods',command=self.show_game_health,
+                   style='Accent.TButton').pack(side='left')
         ttk.Label(installed,text='Select a mod to see details. Use the On / Off column to enable or disable it.',
                   style='Subtle.TLabel',wraplength=950).pack(anchor='w',pady=(0,8))
         filterbar=ttk.Frame(installed);filterbar.pack(fill='x',pady=(0,7))
