@@ -300,6 +300,74 @@ class UnsupportedGameTests(unittest.TestCase):
         self.assertNotIn(SIGNED,safe)
         self.assertEqual(self.opener.calls,0)
 
+    def test_stops_immediately_on_first_exact_file_429(self):
+        import provider_catalogues
+        def rate_limited(url,headers):
+            if urlsplit(url).path.endswith('/files/80'):
+                raise provider_catalogues.ProviderRateLimited(97)
+            return self.fetch(url,headers)
+        result=self.run_test(allow_transfer=True,fetch=rate_limited)
+        self.assertEqual(result['reason'],'provider_rate_limited')
+        self.assertEqual(result['retry_after_seconds'],97)
+        self.assertEqual(result['probe_exact_attempts'],1)
+        self.assertEqual(result['probe_requests'],4)
+        self.assertEqual(result['probe_exact_checked'],0)
+        self.assertEqual(self.opener.calls,0)
+        self.assertIn('Provider cooldown: at least 97 second(s)',modio_aio.public_report(result))
+        self.assert_clean()
+
+    def test_bounded_requests_cannot_exhaust_60_per_minute_key(self):
+        import provider_catalogues
+        def never_verified(url,headers):
+            uri=urlsplit(url)
+            params=parse_qs(uri.query)
+            if uri.path=='/v1/games' and '_q' in params:
+                return {'data':[{'id':700,'name':'Other Game'}],'result_total':1}
+            if uri.path=='/v1/games':
+                return {'data':[{'id':900+i} for i in range(8)],'result_total':8}
+            if uri.path.endswith('/mods'):
+                return {'data':[{'id':70+i} for i in range(5)]}
+            if uri.path.endswith('/files'):
+                parts=uri.path.split('/')
+                game,mod=parts[3],parts[5]
+                return {'data':[{
+                    'id':80,'mod_id':int(mod),'game_id':int(game),
+                    'filename':'Example.zip','filesize':len(self.contents),
+                    'version':'1.0','filehash':{'md5':__import__('hashlib').md5(self.contents).hexdigest()},
+                    'virus_status':1,'virus_positive':0
+                }]}
+            if uri.path.endswith('/files/80'):
+                # The precise file has no valid signed link; never accept it.
+                return {'id':80,'mod_id':int(uri.path.split('/')[5]),
+                        'game_id':int(uri.path.split('/')[3]),
+                        'filename':'Example.zip','filesize':len(self.contents),
+                        'filehash':{'md5':__import__('hashlib').md5(self.contents).hexdigest()},
+                        'virus_status':1,'virus_positive':0,
+                        'download':{'binary_url':''}}
+            self.fail('unexpected test endpoint: '+uri.path)
+        result=self.run_test(allow_transfer=True,fetch=never_verified)
+        self.assertEqual(result['reason'],'provider_request_budget_reached',result)
+        self.assertEqual(result['probe_requests'],modio_aio.MAX_PUBLIC_PROBE_REQUESTS)
+        self.assertLessEqual(result['probe_requests']+1,19)
+        self.assertGreater(result['probe_exact_attempts'],0)
+        self.assertEqual(result['probe_exact_checked'],0)
+        self.assertEqual(self.opener.calls,0)
+        self.assertIn('Request safety:',modio_aio.public_report(result))
+        self.assert_clean()
+
+    def test_limited_sample_request_is_not_mislabeled_bad_api_path(self):
+        import provider_catalogues
+        def rate_sample(url,headers):
+            if (urlsplit(url).path=='/v1/games' and
+                    '_q' not in parse_qs(urlsplit(url).query)):
+                raise provider_catalogues.ProviderRateLimited(0)
+            return self.fetch(url,headers)
+        report=self.run_test(allow_transfer=True,fetch=rate_sample)
+        self.assertEqual(report['reason'],'provider_rate_limited')
+        self.assertEqual(report['retry_after_seconds'],60)
+        self.assertEqual(report['probe_requests'],1)
+        self.assertEqual(self.opener.calls,0)
+
     def test_denied_download_does_not_contact_other_games(self):
         result=self.run_test(allow_transfer=False)
         self.assertTrue(all('/900/' not in path for path,_ in self.requests))

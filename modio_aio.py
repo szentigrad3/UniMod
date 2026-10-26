@@ -55,36 +55,72 @@ def _probe_issue(exc):
     return 'provider_request_failed'
 
 
+MAX_PUBLIC_PROBE_REQUESTS = 18  # user API keys default to 60 requests/minute
+
+
+class _PublicProbeBudgetExhausted(Exception):
+    pass
+
+
 def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
                              progress=None, temp_parent=None, account_id=None):
-    """Bounded public ZIP check; keep each stage's reason without leaking IDs.
+    """Bounded test of *one* temporary public ZIP from another game.
 
-    A publicly accessible game catalogue DOES NOT establish access to modfile
-    metadata. Failures at later read-only API steps must not masquerade as
-    a genuine absence of public ZIPs.
+    All provider-only GETs share a conservative request budget. A 429 stops
+    immediately: continuing to retry could cause credentials to be revoked.
     """
-    report['scope']='Provider-only (different game)'
-    report['probe_games']=0
-    report['probe_mods']=0
-    report['probe_file_lists']=0
-    report['probe_file_records']=0
-    report['probe_preview_candidates']=0
-    report['probe_exact_checked']=0
-    report['probe_access_denials']=0
-    report['probe_stage']='game catalogue'
-    seen_access=seen_limit=seen_error=False
+    report.update({
+        'scope':'Provider-only (different game)',
+        'probe_games':0,'probe_mods':0,'probe_file_lists':0,
+        'probe_file_records':0,'probe_preview_candidates':0,
+        'probe_exact_checked':0,'probe_exact_attempts':0,
+        'probe_exact_rejected':0,'probe_access_denials':0,
+        'probe_requests':0,'probe_stage':'game catalogue'})
+    seen_access=seen_error=False
+
+    def counted_fetch(url,headers):
+        if report['probe_requests']>=MAX_PUBLIC_PROBE_REQUESTS:
+            raise _PublicProbeBudgetExhausted()
+        report['probe_requests']+=1
+        return catalogue.fetch_json(url,headers=headers,fetch=fetch)
+
+    def stop(exc):
+        """True if further provider requests are prohibited for this run."""
+        if isinstance(exc,_PublicProbeBudgetExhausted):
+            report['reason']='provider_request_budget_reached'
+            return True
+        if _probe_issue(exc)=='provider_rate_limited':
+            report['reason']='provider_rate_limited'
+            report['retry_after_seconds']=(
+                exc.retry_after_seconds
+                if isinstance(exc,catalogue.ProviderRateLimited) else 60)
+            return True
+        return False
+
+    def ordinary_error(exc):
+        nonlocal seen_access, seen_error
+        issue=_probe_issue(exc)
+        if issue=='provider_api_access_required':
+            seen_access=True
+            report['probe_access_denials']+=1
+        else:
+            seen_error=True
+
     try:
-        game_ids=modio_keyonly.public_test_game_ids(api_key,fetch=fetch,user_id=account_id)
-    except modio_keyonly.ResolutionError as exc:
-        report['reason']=('provider_api_path_required' if str(exc)=='key_path_required'
-                          else 'provider_request_failed')
-        return report
-    except Exception:
-        report['reason']='provider_request_failed'
+        game_ids=modio_keyonly.public_test_game_ids(
+            api_key,fetch=counted_fetch,user_id=account_id)
+    except Exception as exc:
+        if not stop(exc):
+            report['reason']=(
+                'provider_api_path_required'
+                if isinstance(exc,modio_keyonly.ResolutionError)
+                and str(exc)=='key_path_required'
+                else 'provider_request_failed')
         return report
     if not game_ids:
         report['reason']='provider_sample_unavailable'
         return report
+
     for public_gid in game_ids[:8]:
         report['probe_games']+=1
         report['probe_stage']='mod catalogue'
@@ -92,16 +128,15 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
             base=modio_files._base(account_id,api_key)
             url=f'{base}/games/{public_gid}/mods?'+urlencode({
                 'api_key':api_key.strip(),'_limit':12,'_sort':'-downloads_total'})
-            page=catalogue.fetch_json(url,fetch=fetch)
+            page=catalogue.fetch_json(url,fetch=counted_fetch)
             if not isinstance(page,dict) or not isinstance(page.get('data'),list):
                 seen_error=True
                 continue
         except Exception as exc:
-            issue=_probe_issue(exc)
-            seen_access |= issue=='provider_api_access_required'
-            seen_limit |= issue=='provider_rate_limited'
-            seen_error |= issue=='provider_request_failed'
+            if stop(exc):return report
+            ordinary_error(exc)
             continue
+
         for item in page['data'][:5]:
             proposed=str(item.get('id') or '') if isinstance(item,dict) else ''
             if (not re.fullmatch(r'[1-9][0-9]{0,11}',proposed)
@@ -113,37 +148,31 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
             try:
                 previews,count,rejected=modio_files.list_probe_candidates(
                     public_gid+'/'+proposed,user_id=account_id,api_key=api_key,
-                    fetch=fetch,limit=3)
+                    fetch=counted_fetch,limit=3)
                 report['probe_file_lists']+=1
                 report['probe_file_records']+=count
                 report['probe_preview_candidates']+=len(previews)
             except Exception as exc:
-                issue=_probe_issue(exc)
-                seen_access |= issue=='provider_api_access_required'
-                seen_limit |= issue=='provider_rate_limited'
-                seen_error |= issue=='provider_request_failed'
-                if issue=='provider_api_access_required':
-                    report['probe_access_denials']+=1
+                if stop(exc):return report
+                ordinary_error(exc)
                 continue
+
             for preview in previews:
                 if preview['size']>modio_live_probe.MAX_PROBE_BYTES:
                     continue
                 report['probe_stage']='exact file metadata'
+                report['probe_exact_attempts']+=1
                 try:
-                    # A list result is not a download authorization. Read the
-                    # exact approved file record, verify hash and identity,
-                    # and obtain its current signed URL before trying bytes.
                     candidate=modio_files.refresh_selected(
-                        preview,user_id=account_id,api_key=api_key,fetch=fetch)
+                        preview,user_id=account_id,api_key=api_key,
+                        fetch=counted_fetch)
                     report['probe_exact_checked']+=1
                 except Exception as exc:
-                    issue=_probe_issue(exc)
-                    seen_access |= issue=='provider_api_access_required'
-                    seen_limit |= issue=='provider_rate_limited'
-                    seen_error |= issue=='provider_request_failed'
-                    if issue=='provider_api_access_required':
-                        report['probe_access_denials']+=1
+                    if stop(exc):return report
+                    ordinary_error(exc)
+                    report['probe_exact_rejected']+=1
                     continue
+
                 report['selection']='Independent public test mod'
                 report['metadata']='Passed'
                 _emit(progress,'download')
@@ -151,25 +180,27 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
                 try:
                     downloaded=modio_live_probe.probe_download(
                         candidate,user_id=account_id,api_key=api_key,
-                        fetch=fetch,opener=opener,temp_parent=temp_parent)
+                        fetch=counted_fetch,opener=opener,temp_parent=temp_parent)
                     if (downloaded.get('temporary') is not True or
                             downloaded.get('installed') is not False):
                         raise ValueError('Unexpected download result')
                     report['download']='Passed'
                     report['verified_bytes']=int(downloaded.get('bytes_verified',0))
                     report['reason']='provider_only_complete'
-                except Exception:
+                except Exception as exc:
+                    if stop(exc):
+                        report['selection']='Not selected'
+                        report['metadata']='Not available'
+                        report['download']='Not available'
+                        return report
                     report['download']='Failed'
                     report['reason']='provider_only_download_failed'
                 return report
+
     if report['probe_file_lists'] and not report['probe_preview_candidates']:
-        # A handful of restricted mods does not invalidate all of the
-        # successfully read lists. They genuinely yielded no eligible ZIP.
         report['reason']='provider_no_eligible_zip'
     elif seen_access:
         report['reason']='provider_api_access_required'
-    elif seen_limit:
-        report['reason']='provider_rate_limited'
     elif seen_error:
         report['reason']='provider_request_failed'
     elif report['probe_file_lists']:
@@ -177,7 +208,6 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
     else:
         report['reason']='provider_sample_unavailable'
     return report
-
 
 def run_aio(game, *, game_id='', user_id='', api_key='', api_path='', mod_id='',
             allow_transfer=False, fetch=None, opener=None,
@@ -235,6 +265,10 @@ def run_aio(game, *, game_id='', user_id='', api_key='', api_path='', mod_id='',
             report['catalogue']='Passed'
         report['game'] = 'Passed'
         report['scope']='Selected game'
+    except catalogue.ProviderRateLimited as exc:
+        report['reason']='provider_rate_limited'
+        report['retry_after_seconds']=exc.retry_after_seconds
+        return report
     except modio_keyonly.ResolutionError as exc:
         code=str(exc)
         if code in ('game_not_found','ambiguous_game'):
@@ -300,6 +334,11 @@ def run_aio(game, *, game_id='', user_id='', api_key='', api_path='', mod_id='',
         # Verify exact identity and source metadata before any transfer.
         modio_files.refresh_selected(rows[0], user_id=user_id, api_key=api_key, fetch=fetch)
         report['metadata'] = 'Passed'
+    except catalogue.ProviderRateLimited as exc:
+        report['metadata']='Not available'
+        report['reason']='provider_rate_limited'
+        report['retry_after_seconds']=exc.retry_after_seconds
+        return report
     except Exception:
         report['metadata'] = 'Failed'
         report['reason'] = 'metadata_api'
@@ -327,6 +366,10 @@ def run_aio(game, *, game_id='', user_id='', api_key='', api_path='', mod_id='',
         report['download'] = 'Passed'
         report['verified_bytes'] = int(outcome.get('bytes_verified', 0))
         report['reason'] = 'complete'
+    except catalogue.ProviderRateLimited as exc:
+        report['download']='Not available'
+        report['reason']='provider_rate_limited'
+        report['retry_after_seconds']=exc.retry_after_seconds
     except Exception:
         report['download'] = 'Failed'
         report['reason'] = 'download_failed'
@@ -355,7 +398,8 @@ HELP = {
     'provider_no_eligible_zip': 'Readable mod release lists contained no ZIP that met the checksum, size and safety requirements. Some other API requests may have been restricted.',
     'provider_api_path_required': 'The provider-only catalogue cannot be read using the legacy API address. Your mod.io account-specific API path may be required.',
     'provider_api_access_required': 'mod.io refused one or more mod/release requests. Public game catalogue access does not verify access to downloads; your account-specific API path may be required.',
-    'provider_rate_limited': 'mod.io rate-limited the provider-only test. Try again later; this does not mean your API key is invalid.',
+    'provider_rate_limited': 'mod.io returned a rate limit (429). UniMod stopped immediately; wait for the provider cooldown before retrying.',
+    'provider_request_budget_reached': 'UniMod stopped after its conservative API-request budget, before reaching a rate limit. No file was installed.',
     'provider_request_failed': 'A provider-only API lookup failed. The public catalogue response alone cannot verify file/download access.',
     'invalid_api_path': 'Use the mod.io API URL from your own API dashboard (https://u-<your-user-id>.modapi.io/v1). No URL was saved.'
 }
@@ -398,5 +442,20 @@ def public_report(result):
                   all(type(state.get(k)) is int for k in
                       ('probe_file_records','probe_preview_candidates',
                        'probe_exact_checked','probe_access_denials')) else '')
+            + ('Request safety: '+str(max(0,min(18,state['probe_requests'])))+
+               ' of 18 provider-only API requests; '+
+               str(max(0,min(120,state['probe_exact_attempts'])))+
+               ' exact-file attempt(s); '+
+               str(max(0,min(120,state['probe_exact_rejected'])))+
+               ' exact-file rejection(s).\n'
+               if state.get('scope')=='Provider-only (different game)' and
+                  all(type(state.get(k)) is int for k in
+                      ('probe_requests','probe_exact_attempts',
+                       'probe_exact_rejected')) else '')
+            + ('Provider cooldown: at least '+
+               str(max(1,min(3600,state['retry_after_seconds'])))+
+               ' second(s) before retry.\n'
+               if reason=='provider_rate_limited' and
+                  type(state.get('retry_after_seconds')) is int else '')
             + 'Real-game installation: Not attempted\n'
             'Private key, account IDs, mod IDs, paths and download URLs: excluded.\n')
