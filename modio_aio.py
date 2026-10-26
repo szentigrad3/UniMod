@@ -20,6 +20,20 @@ REQUIRED = ('installed', 'updated', 'backups', 'tamper_refused',
             'failed_update_restored', 'secrets_not_persisted')
 
 
+def validate_user_api_path(value):
+    """Optional session-only user API endpoint; never guess or persist user IDs."""
+    if value in ('',None):
+        return None
+    if not isinstance(value,str):
+        raise ValueError('invalid_api_path')
+    match=re.fullmatch(
+        r'https://u-([1-9][0-9]{0,11})\\.modapi\\.io/v1/?',
+        value.strip())
+    if match is None:
+        raise ValueError('invalid_api_path')
+    return match.group(1)
+
+
 def _normal(value):
     return re.sub('[^a-z0-9]', '', str(value or '').casefold())
 
@@ -42,7 +56,7 @@ def _probe_issue(exc):
 
 
 def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
-                             progress=None, temp_parent=None):
+                             progress=None, temp_parent=None, account_id=None):
     """Bounded public ZIP check; keep each stage's reason without leaking IDs.
 
     A publicly accessible game catalogue DOES NOT establish access to modfile
@@ -56,7 +70,7 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
     report['probe_stage']='game catalogue'
     seen_access=seen_limit=seen_error=False
     try:
-        game_ids=modio_keyonly.public_test_game_ids(api_key,fetch=fetch)
+        game_ids=modio_keyonly.public_test_game_ids(api_key,fetch=fetch,user_id=account_id)
     except modio_keyonly.ResolutionError as exc:
         report['reason']=('provider_api_path_required' if str(exc)=='key_path_required'
                           else 'provider_request_failed')
@@ -71,7 +85,7 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
         report['probe_games']+=1
         report['probe_stage']='mod catalogue'
         try:
-            base=modio_files._base(None,api_key)
+            base=modio_files._base(account_id,api_key)
             url=f'{base}/games/{public_gid}/mods?'+urlencode({
                 'api_key':api_key.strip(),'_limit':12,'_sort':'-downloads_total'})
             page=catalogue.fetch_json(url,fetch=fetch)
@@ -94,14 +108,14 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
             report['probe_stage']='release files'
             try:
                 rows=modio_files.list_modfiles(
-                    public_gid+'/'+proposed,user_id=None,api_key=api_key,fetch=fetch)
+                    public_gid+'/'+proposed,user_id=account_id,api_key=api_key,fetch=fetch)
                 report['probe_file_lists']+=1
                 eligible=[r for r in rows if type(r.get('size')) is int
                           and 0<r['size']<=modio_live_probe.MAX_PROBE_BYTES]
                 if not eligible:
                     continue
                 candidate=min(eligible,key=lambda r:(r['size'],-int(r['version_id'])))
-                modio_files.refresh_selected(candidate,user_id=None,api_key=api_key,fetch=fetch)
+                modio_files.refresh_selected(candidate,user_id=account_id,api_key=api_key,fetch=fetch)
             except Exception as exc:
                 issue=_probe_issue(exc)
                 seen_access |= issue=='provider_api_access_required'
@@ -114,7 +128,7 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
             report['probe_stage']='temporary ZIP'
             try:
                 downloaded=modio_live_probe.probe_download(
-                    candidate,user_id=None,api_key=api_key,fetch=fetch,
+                    candidate,user_id=account_id,api_key=api_key,fetch=fetch,
                     opener=opener,temp_parent=temp_parent)
                 if (downloaded.get('temporary') is not True or
                         downloaded.get('installed') is not False):
@@ -139,7 +153,7 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
     return report
 
 
-def run_aio(game, *, game_id='', user_id='', api_key='', mod_id='',
+def run_aio(game, *, game_id='', user_id='', api_key='', api_path='', mod_id='',
             allow_transfer=False, fetch=None, opener=None,
             offline_run=None, progress=None, temp_parent=None):
     """Return only whitelisted status codes; omit credentials, IDs and URLs.
@@ -165,11 +179,16 @@ def run_aio(game, *, game_id='', user_id='', api_key='', mod_id='',
     if not isinstance(api_key,str) or len(api_key.strip()) < 8:
         report['reason'] = 'connect'
         return report
+    try:
+        account_id=validate_user_api_path(api_path)
+    except ValueError:
+        report['reason']='invalid_api_path'
+        return report
     legacy = (isinstance(game_id,str) and isinstance(user_id,str) and
               re.fullmatch(r'[1-9][0-9]{0,11}',game_id) and
               re.fullmatch(r'[1-9][0-9]{0,11}',user_id))
     # Explicit but malformed legacy account IDs are never silently ignored.
-    if (game_id or user_id) and not legacy:
+    if ((game_id or user_id) and not legacy) or (legacy and account_id):
         report['reason'] = 'connect'
         return report
     _emit(progress, 'game')
@@ -184,8 +203,9 @@ def run_aio(game, *, game_id='', user_id='', api_key='', mod_id='',
         else:
             # The key cannot reveal the owner's user ID. Resolve an exact
             # public game name; never guess a game from the API key.
-            game_id = modio_keyonly.resolve_game(game, api_key, fetch=fetch)
-            user_id = None  # Public key-only GET route, not /me.
+            game_id = modio_keyonly.resolve_game(game, api_key, fetch=fetch,
+                                                  user_id=account_id)
+            user_id = account_id  # User path, if provided; never call /me.
             report['catalogue']='Passed'
         report['game'] = 'Passed'
         report['scope']='Selected game'
@@ -202,7 +222,8 @@ def run_aio(game, *, game_id='', user_id='', api_key='', mod_id='',
             if allow_transfer and code=='game_not_found':
                 return _probe_other_public_game(
                     report,api_key,fetch=fetch,opener=opener,
-                    progress=progress,temp_parent=temp_parent)
+                    progress=progress,temp_parent=temp_parent,
+                    account_id=account_id)
             return report
         report['game'] = 'Failed'
         report['reason'] = code if code in HELP else 'game_api'
@@ -310,6 +331,7 @@ HELP = {
     'provider_api_access_required': 'mod.io refused one or more mod/release requests. Public game catalogue access does not verify access to downloads; your account-specific API path may be required.',
     'provider_rate_limited': 'mod.io rate-limited the provider-only test. Try again later; this does not mean your API key is invalid.',
     'provider_request_failed': 'A provider-only API lookup failed. The public catalogue response alone cannot verify file/download access.',
+    'invalid_api_path': 'Use the mod.io API URL from your own API dashboard (https://u-<your-user-id>.modapi.io/v1). No URL was saved.'
 }
 
 
