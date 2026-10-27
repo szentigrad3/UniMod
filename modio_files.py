@@ -41,7 +41,7 @@ def exact_file_rejection_code(data, game, mod):
         return 'invalid_record'
     if str(data.get('mod_id'))!=mod or (data.get('game_id') is not None and str(data['game_id'])!=game):
         return 'identity'
-    if not re.fullmatch(r'[1-9]\\d{0,11}',str(data.get('id') or '')):
+    if not re.fullmatch(r'[1-9]\d{0,11}',str(data.get('id') or '')):
         return 'identity'
     try:
         filename=provider_downloads._filename(data.get('filename'))
