@@ -185,6 +185,8 @@ class UnsupportedGameTests(unittest.TestCase):
         result=self.run_test(allow_transfer=True,fetch=changed_exact)
         self.assertEqual(result['reason'],'provider_exact_unverified')
         self.assertEqual(result['probe_exact_checked'],0)
+        self.assertEqual(result['probe_rejection_reasons'],{'changed_metadata':1})
+        self.assertIn('changed metadata 1',modio_aio.public_report(result))
         self.assertEqual(self.opener.calls,0)
         self.assert_clean()
 
