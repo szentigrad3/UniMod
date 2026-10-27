@@ -32,6 +32,53 @@ def _base(user_id, api_key):
             if user_id is not None else 'https://api.mod.io/v1')
 
 
+def exact_file_rejection_code(data, game, mod):
+    """Return only fixed, non-secret reasons for a failed exact-file read.
+
+    This is diagnostic only: it never relaxes download validation.
+    """
+    if not isinstance(data,dict):
+        return 'invalid_record'
+    if str(data.get('mod_id'))!=mod or (data.get('game_id') is not None and str(data['game_id'])!=game):
+        return 'identity'
+    if not re.fullmatch(r'[1-9]\\d{0,11}',str(data.get('id') or '')):
+        return 'identity'
+    try:
+        filename=provider_downloads._filename(data.get('filename'))
+        size=int(data.get('filesize'))
+    except (provider_downloads.DownloadError,ValueError,TypeError,OverflowError):
+        return 'filename_or_size'
+    if not filename.lower().endswith('.zip') or not 0<size<=provider_downloads.MAX_FILE:
+        return 'filename_or_size'
+    h=data.get('filehash')
+    md5=h.get('md5') if isinstance(h,dict) else None
+    if not isinstance(md5,str) or not re.fullmatch(r'[a-fA-F0-9]{32}',md5):
+        return 'checksum'
+    if data.get('virus_positive') not in (None,0) or data.get('virus_status') not in (None,1):
+        return 'scan_status'
+    download=data.get('download')
+    if not isinstance(download,dict) or not download.get('binary_url'):
+        return 'missing_download_url'
+    if not provider_downloads._safe_url(download['binary_url'],'mod.io'):
+        return 'download_url_policy'
+    parsed=urlsplit(download['binary_url'])
+    prefix=f'/v1/games/{game}/mods/{mod}/files/{data["id"]}/download/'
+    if not parsed.path.startswith(prefix) or len(parsed.path)<=len(prefix):
+        return 'download_url_policy'
+    try:
+        expires=int(download.get('date_expires')) if download.get('date_expires') is not None else 0
+    except (TypeError,ValueError):
+        return 'expiration'
+    if expires and expires<=int(time.time())+15:
+        return 'expiration'
+    platforms=data.get('platforms') or []
+    if not isinstance(platforms,list) or (platforms and not any(
+            isinstance(p,dict) and str(p.get('platform','')).upper() in ('ALL','LINUX','WINDOWS')
+            and p.get('status')==1 for p in platforms)):
+        return 'platform'
+    return 'other'
+
+
 def _parse_modfile(data, game, mod):
     if not isinstance(data,dict) or str(data.get('mod_id'))!=mod:
         return None
