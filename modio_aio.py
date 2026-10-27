@@ -76,6 +76,7 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
         'probe_file_records':0,'probe_preview_candidates':0,
         'probe_exact_checked':0,'probe_exact_attempts':0,
         'probe_exact_rejected':0,'probe_access_denials':0,
+        'probe_rejection_reasons':{},
         'probe_requests':0,'probe_stage':'game catalogue'})
     seen_access=seen_error=False
 
@@ -164,9 +165,24 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
                 report['probe_stage']='exact file metadata'
                 report['probe_exact_attempts']+=1
                 try:
+                    def diagnostic_fetch(url,headers):
+                        data=counted_fetch(url,headers)
+                        game,mod=modio_files._identity(preview['identity'])
+                        code=modio_files.exact_file_rejection_code(data,game,mod)
+                        if code=='other' and isinstance(data,dict):
+                            row=modio_files._parse_modfile(data,game,mod)
+                            if row is not None:
+                                for field in ('filename','size','hashes','version'):
+                                    if preview.get(field)!=row.get(field):
+                                        code='changed_metadata'
+                                        break
+                        if code!='other':
+                            counts=report['probe_rejection_reasons']
+                            counts[code]=counts.get(code,0)+1
+                        return data
                     candidate=modio_files.refresh_selected(
                         preview,user_id=account_id,api_key=api_key,
-                        fetch=counted_fetch)
+                        fetch=diagnostic_fetch)
                     report['probe_exact_checked']+=1
                 except Exception as exc:
                     if stop(exc):return report
@@ -449,6 +465,19 @@ def public_report(result):
                   all(type(state.get(k)) is int for k in
                       ('probe_file_records','probe_preview_candidates',
                        'probe_exact_checked','probe_access_denials')) else '')
+            + ('Exact-file rejection breakdown: '+', '.join(
+               key.replace('_',' ')+' '+str(state['probe_rejection_reasons'][key])
+               for key in sorted(state['probe_rejection_reasons'])
+               if key in ('invalid_record','identity','filename_or_size',
+                          'checksum','scan_status','missing_download_url',
+                          'download_url_policy','expiration','platform',
+                          'changed_metadata')
+               and type(state['probe_rejection_reasons'][key]) is int
+               and 0 < state['probe_rejection_reasons'][key] <= 18
+               )+'\\n'
+               if state.get('scope')=='Provider-only (different game)'
+               and isinstance(state.get('probe_rejection_reasons'),dict)
+               and state['probe_rejection_reasons'] else '')
             + ('Request safety: '+str(max(0,min(18,state['probe_requests'])))+
                ' of 18 provider-only API requests; '+
                str(max(0,min(120,state['probe_exact_attempts'])))+
