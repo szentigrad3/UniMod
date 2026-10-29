@@ -164,6 +164,7 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
                     continue
                 report['probe_stage']='exact file metadata'
                 report['probe_exact_attempts']+=1
+                recorded_reason=[False]
                 try:
                     def diagnostic_fetch(url,headers):
                         data=counted_fetch(url,headers)
@@ -179,6 +180,7 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
                         if code!='other':
                             counts=report['probe_rejection_reasons']
                             counts[code]=counts.get(code,0)+1
+                            recorded_reason[0]=True
                         return data
                     candidate=modio_files.refresh_selected(
                         preview,user_id=account_id,api_key=api_key,
@@ -195,8 +197,9 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
                         if not report['probe_rejection_reasons'].get('provider_failure'):
                             report['probe_rejection_reasons']['provider_failure']=0
                         report['probe_rejection_reasons']['provider_failure']+=1
-                    elif not any(report['probe_rejection_reasons'].values()):
-                        report['probe_rejection_reasons']['other']=1
+                    elif not recorded_reason[0]:
+                        counts=report['probe_rejection_reasons']
+                        counts['other']=counts.get('other',0)+1
                     report['probe_exact_rejected']+=1
                     continue
 
