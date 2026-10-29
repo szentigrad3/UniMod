@@ -190,6 +190,13 @@ def _probe_other_public_game(report, api_key, *, fetch=None, opener=None,
                     # rejection, not proof of provider/API failure.
                     if not isinstance(exc,modio_files.ModioError):
                         ordinary_error(exc)
+                        # Errors before an exact-file JSON response still need
+                        # a safe category, without recording response bodies.
+                        if not report['probe_rejection_reasons'].get('provider_failure'):
+                            report['probe_rejection_reasons']['provider_failure']=0
+                        report['probe_rejection_reasons']['provider_failure']+=1
+                    elif not any(report['probe_rejection_reasons'].values()):
+                        report['probe_rejection_reasons']['other']=1
                     report['probe_exact_rejected']+=1
                     continue
 
@@ -471,7 +478,7 @@ def public_report(result):
                if key in ('invalid_record','identity','filename_or_size',
                           'checksum','scan_status','missing_download_url',
                           'download_url_policy','expiration','platform',
-                          'changed_metadata')
+                          'changed_metadata','provider_failure','other')
                and type(state['probe_rejection_reasons'][key]) is int
                and 0 < state['probe_rejection_reasons'][key] <= 18
                )+'\\n'
