@@ -108,7 +108,7 @@ class UnsupportedGameTests(unittest.TestCase):
         for private in (KEY,SIGNED,GAME['root'],'900/70'):
             self.assertNotIn(private,report)
 
-    def test_independent_fallback_checks_active_game_beyond_first_four(self):
+    def test_independent_fallback_stays_within_three_games(self):
         def later_game(url, headers):
             parts=urlsplit(url)
             params=parse_qs(parts.query)
@@ -127,10 +127,11 @@ class UnsupportedGameTests(unittest.TestCase):
                 return {'data':[]}
             return self.fetch(url,headers)
         result=self.run_test(fetch=later_game,allow_transfer=True)
-        self.assertEqual(result['reason'],'provider_only_complete')
-        self.assertEqual(result['download'],'Passed')
+        self.assertEqual(result['reason'],'provider_sample_unavailable')
+        self.assertEqual(result['probe_games'],3)
+        self.assertEqual(result['download'],'Not available')
         self.assertEqual(result['game'],'Not available')
-        self.assertEqual(self.opener.calls,1)
+        self.assertEqual(self.opener.calls,0)
         self.assert_clean()
         for secret in (KEY,SIGNED,GAME['root'],'900/70'):
             self.assertNotIn(secret,modio_aio.public_report(result))
@@ -182,9 +183,44 @@ class UnsupportedGameTests(unittest.TestCase):
                 return row
             return self.fetch(url,headers)
         result=self.run_test(allow_transfer=True,fetch=changed_exact)
-        self.assertNotEqual(result['reason'],'provider_only_complete')
+        self.assertEqual(result['reason'],'provider_exact_unverified')
         self.assertEqual(result['probe_exact_checked'],0)
+        self.assertEqual(result['probe_rejection_reasons'],{'changed_metadata':1})
+        self.assertIn('changed metadata 1',modio_aio.public_report(result))
         self.assertEqual(self.opener.calls,0)
+        self.assert_clean()
+
+    def test_exact_file_missing_download_url_is_reported_safely(self):
+        def no_url(url,headers):
+            if urlsplit(url).path.endswith('/files/80'):
+                record=dict(self.fetch(url,headers))
+                record['download']={}
+                return record
+            return self.fetch(url,headers)
+        result=self.run_test(allow_transfer=True,fetch=no_url)
+        self.assertEqual(result['reason'],'provider_exact_unverified')
+        self.assertEqual(result['probe_rejection_reasons'],{'missing_download_url':1})
+        self.assertEqual(self.opener.calls,0)
+        rendered=modio_aio.public_report(result)
+        self.assertIn('missing download url 1',rendered)
+        self.assertNotIn(KEY,rendered)
+        self.assertNotIn(SIGNED,rendered)
+        self.assert_clean()
+
+    def test_exact_file_provider_failure_is_reported_without_secrets(self):
+        import provider_catalogues
+        def broken_endpoint(url,headers):
+            if urlsplit(url).path.endswith('/files/80'):
+                raise provider_catalogues.ProviderError('Provider request failed (HTTP 500).')
+            return self.fetch(url,headers)
+        result=self.run_test(allow_transfer=True,fetch=broken_endpoint)
+        self.assertEqual(result['reason'],'provider_request_failed')
+        self.assertEqual(result['probe_rejection_reasons'],{'provider_failure':1})
+        self.assertEqual(self.opener.calls,0)
+        report=modio_aio.public_report(result)
+        self.assertIn('provider failure 1',report)
+        self.assertNotIn(KEY,report)
+        self.assertNotIn(SIGNED,report)
         self.assert_clean()
 
     def test_unscanned_release_is_not_downloaded(self):
@@ -346,8 +382,10 @@ class UnsupportedGameTests(unittest.TestCase):
                         'download':{'binary_url':''}}
             self.fail('unexpected test endpoint: '+uri.path)
         result=self.run_test(allow_transfer=True,fetch=never_verified)
-        self.assertEqual(result['reason'],'provider_request_budget_reached',result)
-        self.assertEqual(result['probe_requests'],modio_aio.MAX_PUBLIC_PROBE_REQUESTS)
+        self.assertEqual(result['reason'],'provider_exact_unverified',result)
+        self.assertEqual(result['probe_games'],3)
+        self.assertEqual(result['probe_mods'],6)
+        self.assertEqual(result['probe_requests'],16)
         self.assertLessEqual(result['probe_requests']+1,19)
         self.assertGreater(result['probe_exact_attempts'],0)
         self.assertEqual(result['probe_exact_checked'],0)
